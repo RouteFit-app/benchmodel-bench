@@ -1,0 +1,135 @@
+{
+  "benchmark_name": "Cross-File Consistency",
+  "version": 2,
+  "repo": "https://github.com/RouteFit-app/benchmodel-fastapi-template",
+  "base_branch": "master",
+  "buggy_branch": "benchmark/crossfile-v2",
+  "created_at": "2026-06-20",
+  "file_locations": {
+    "models.py": "backend/app/models.py",
+    "crud.py": "backend/app/crud.py"
+  },
+  "scoring": {
+    "detect_points": 10,
+    "correct_file_bonus": 3,
+    "correct_severity_bonus": 2,
+    "false_positive_penalty": -2,
+    "severity_weight": {
+      "high": 1.5,
+      "medium": 1.0,
+      "low": 0.5
+    }
+  },
+  "bugs": [
+    {
+      "id": "BUG_001",
+      "file": "models.py",
+      "function": "UserPublic",
+      "category": "sensitive_data_exposure",
+      "severity": "high",
+      "security_relevant": true,
+      "difficulty": "hard",
+      "description": "UserPublic \u2014 the schema serialized back to API clients \u2014 now declares `hashed_password`. Because the User table model has that column, every user response will leak the password hash to the client. The field looks like an innocent addition; it's only dangerous once you know UserPublic is the public response contract and hashed_password is a secret on the table.",
+      "detection_hints": {
+        "must_mention_any": [
+          "hashed_password",
+          "UserPublic",
+          "leak",
+          "expose",
+          "password hash",
+          "sensitive",
+          "response",
+          "returned to client",
+          "public"
+        ]
+      },
+      "injection": {
+        "find": "class UserPublic(UserBase):\n    id: uuid.UUID\n    created_at: datetime | None = None\n",
+        "replace_with": "class UserPublic(UserBase):\n    id: uuid.UUID\n    created_at: datetime | None = None\n    hashed_password: str\n"
+      }
+    },
+    {
+      "id": "BUG_002",
+      "file": "models.py",
+      "function": "UserUpdateMe",
+      "category": "broken_access_control",
+      "severity": "high",
+      "security_relevant": true,
+      "difficulty": "hard",
+      "description": "UserUpdateMe is the body schema for the self-service `PATCH /users/me` endpoint. Adding `is_superuser` to it lets any authenticated user promote themselves to admin by setting the flag on their own profile update \u2014 a mass-assignment privilege escalation. Catching it requires knowing which endpoint consumes this schema and that is_superuser is a privileged field, not just reading the diff.",
+      "detection_hints": {
+        "must_mention_any": [
+          "is_superuser",
+          "UserUpdateMe",
+          "privilege",
+          "escalation",
+          "mass assignment",
+          "admin",
+          "self",
+          "update me",
+          "superuser",
+          "/users/me"
+        ]
+      },
+      "injection": {
+        "find": "class UserUpdateMe(SQLModel):\n    full_name: str | None = Field(default=None, max_length=255)\n    email: EmailStr | None = Field(default=None, max_length=255)\n",
+        "replace_with": "class UserUpdateMe(SQLModel):\n    full_name: str | None = Field(default=None, max_length=255)\n    email: EmailStr | None = Field(default=None, max_length=255)\n    is_superuser: bool = False\n"
+      }
+    },
+    {
+      "id": "BUG_003",
+      "file": "models.py",
+      "function": "Item",
+      "category": "relationship_drift",
+      "severity": "medium",
+      "security_relevant": false,
+      "difficulty": "hard",
+      "description": "Item.owner_id drops its `ondelete=\"CASCADE\"`, but User.items still declares `Relationship(..., cascade_delete=True)`. The two halves of the same relationship now disagree: the ORM expects deletes to cascade while the database foreign key no longer enforces it, so deleting a user with items will raise a FK-constraint error (or orphan rows). The bug is only visible by cross-referencing the User side of the relationship with the Item side.",
+      "detection_hints": {
+        "must_mention_any": [
+          "ondelete",
+          "CASCADE",
+          "owner_id",
+          "cascade_delete",
+          "relationship",
+          "orphan",
+          "foreign key",
+          "delete",
+          "items"
+        ]
+      },
+      "injection": {
+        "find": "        foreign_key=\"user.id\", nullable=False, ondelete=\"CASCADE\"\n",
+        "replace_with": "        foreign_key=\"user.id\", nullable=False\n"
+      }
+    },
+    {
+      "id": "BUG_004",
+      "file": "models.py",
+      "function": "UserUpdate",
+      "category": "validation_drift",
+      "severity": "medium",
+      "security_relevant": true,
+      "difficulty": "medium",
+      "description": "UserUpdate lowers the password `min_length` to 6, while UserCreate (signup) still enforces 8. The password policy is now inconsistent across the two schemas: a user can weaken their password below the registration minimum on update. Detecting it means comparing the constraint in one model class against the other.",
+      "detection_hints": {
+        "must_mention_any": [
+          "min_length",
+          "password",
+          "UserUpdate",
+          "policy",
+          "weaker",
+          "validation",
+          "inconsistent",
+          "UserCreate",
+          "6",
+          "8"
+        ]
+      },
+      "injection": {
+        "find": "    password: str | None = Field(default=None, min_length=8, max_length=128)\n",
+        "replace_with": "    password: str | None = Field(default=None, min_length=6, max_length=128)\n"
+      }
+    }
+  ]
+}

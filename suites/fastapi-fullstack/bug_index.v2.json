@@ -1,0 +1,286 @@
+{
+  "benchmark_name": "FastAPI Full-Stack Bug Injection",
+  "version": 2,
+  "repo": "https://github.com/RouteFit-app/benchmodel-fastapi-template",
+  "base_branch": "master",
+  "buggy_branch": "benchmark/buggy-v2",
+  "created_at": "2026-06-18",
+  "file_locations": {
+    "items.py": "backend/app/api/routes/items.py",
+    "users.py": "backend/app/api/routes/users.py",
+    "login.py": "backend/app/api/routes/login.py",
+    "deps.py": "backend/app/api/deps.py",
+    "security.py": "backend/app/core/security.py"
+  },
+  "scoring": {
+    "detect_points": 10,
+    "correct_file_bonus": 3,
+    "correct_severity_bonus": 2,
+    "false_positive_penalty": -2,
+    "severity_weight": {
+      "high": 1.5,
+      "medium": 1.0,
+      "low": 0.5
+    }
+  },
+  "bugs": [
+    {
+      "id": "BUG_001",
+      "file": "items.py",
+      "function": "read_item",
+      "category": "broken_access_control",
+      "severity": "high",
+      "security_relevant": true,
+      "description": "Ownership check in read_item inverted (!= becomes ==): a non-superuser can now read any other user's item by id, and is blocked from reading their own. Classic IDOR / broken object-level authorization.",
+      "injection": {
+        "find": "    item = session.get(Item, id)\n    if not item:\n        raise HTTPException(status_code=404, detail=\"Item not found\")\n    if not current_user.is_superuser and (item.owner_id != current_user.id):\n        raise HTTPException(status_code=403, detail=\"Not enough permissions\")\n    return item\n",
+        "replace_with": "    item = session.get(Item, id)\n    if not item:\n        raise HTTPException(status_code=404, detail=\"Item not found\")\n    if not current_user.is_superuser and (item.owner_id == current_user.id):\n        raise HTTPException(status_code=403, detail=\"Not enough permissions\")\n    return item\n"
+      },
+      "detection_hints": {
+        "must_mention_any": [
+          "owner_id",
+          "permission",
+          "IDOR",
+          "authorization",
+          "ownership",
+          "access control",
+          "==",
+          "other user"
+        ]
+      },
+      "difficulty": "medium"
+    },
+    {
+      "id": "BUG_002",
+      "file": "items.py",
+      "function": "read_items",
+      "category": "data_exposure",
+      "severity": "high",
+      "security_relevant": true,
+      "description": "The owner-scoping filter (.where(Item.owner_id == current_user.id)) was removed from the non-superuser list query, so a normal user's GET /items now returns every user's items. Multi-tenant data leak.",
+      "injection": {
+        "find": "        statement = (\n            select(Item)\n            .where(Item.owner_id == current_user.id)\n            .order_by(col(Item.created_at).desc())\n            .offset(skip)\n            .limit(limit)\n        )\n",
+        "replace_with": "        statement = (\n            select(Item)\n            .order_by(col(Item.created_at).desc())\n            .offset(skip)\n            .limit(limit)\n        )\n"
+      },
+      "detection_hints": {
+        "must_mention_any": [
+          "where",
+          "owner_id",
+          "filter",
+          "scoping",
+          "all items",
+          "isolation",
+          "data exposure",
+          "tenant",
+          "leak"
+        ]
+      },
+      "difficulty": "hard"
+    },
+    {
+      "id": "BUG_003",
+      "file": "security.py",
+      "function": "create_access_token",
+      "category": "insecure_token",
+      "severity": "high",
+      "security_relevant": true,
+      "description": "The 'exp' (expiration) claim was dropped from the JWT payload, so access tokens never expire. A leaked token is valid forever.",
+      "injection": {
+        "find": "    to_encode = {\"exp\": expire, \"sub\": str(subject)}\n",
+        "replace_with": "    to_encode = {\"sub\": str(subject)}\n"
+      },
+      "detection_hints": {
+        "must_mention_any": [
+          "exp",
+          "expire",
+          "expiration",
+          "token",
+          "JWT",
+          "never expires",
+          "expiry"
+        ]
+      },
+      "difficulty": "hard"
+    },
+    {
+      "id": "BUG_006",
+      "file": "users.py",
+      "function": "update_password_me",
+      "category": "broken_authentication",
+      "severity": "high",
+      "security_relevant": true,
+      "description": "The current-password verification was removed from update_password_me, so an authenticated session can set a new password without proving knowledge of the current one (enables full account takeover after a session hijack/CSRF).",
+      "injection": {
+        "find": "    verified, _ = verify_password(body.current_password, current_user.hashed_password)\n    if not verified:\n        raise HTTPException(status_code=400, detail=\"Incorrect password\")\n",
+        "replace_with": "    verified, _ = verify_password(body.current_password, current_user.hashed_password)\n"
+      },
+      "detection_hints": {
+        "must_mention_any": [
+          "verify_password",
+          "current password",
+          "verified",
+          "Incorrect password",
+          "authentication",
+          "bypass",
+          "removed",
+          "verification",
+          "commented"
+        ]
+      },
+      "difficulty": "medium"
+    },
+    {
+      "id": "BUG_007",
+      "file": "users.py",
+      "function": "delete_user_me",
+      "category": "access_control_logic",
+      "severity": "medium",
+      "security_relevant": true,
+      "description": "Self-delete guard inverted (if current_user.is_superuser -> if not current_user.is_superuser). Normal users can no longer delete their own account, while superusers can now delete themselves -- the opposite of the intended rule.",
+      "injection": {
+        "find": "    if current_user.is_superuser:\n        raise HTTPException(\n            status_code=403, detail=\"Super users are not allowed to delete themselves\"\n        )\n    session.delete(current_user)\n",
+        "replace_with": "    if not current_user.is_superuser:\n        raise HTTPException(\n            status_code=403, detail=\"Super users are not allowed to delete themselves\"\n        )\n    session.delete(current_user)\n"
+      },
+      "detection_hints": {
+        "must_mention_any": [
+          "is_superuser",
+          "delete",
+          "self-delete",
+          "superuser",
+          "inverted"
+        ]
+      },
+      "difficulty": "medium"
+    },
+    {
+      "id": "BUG_008",
+      "file": "users.py",
+      "function": "update_user_me",
+      "category": "data_integrity",
+      "severity": "medium",
+      "security_relevant": false,
+      "description": "Email-uniqueness check inverted (!= becomes ==): updating to your OWN email is now rejected as a conflict, while taking ANOTHER existing user's email is allowed, creating duplicate emails.",
+      "injection": {
+        "find": "        if existing_user and existing_user.id != current_user.id:\n",
+        "replace_with": "        if existing_user and existing_user.id == current_user.id:\n"
+      },
+      "detection_hints": {
+        "must_mention_any": [
+          "email",
+          "duplicate",
+          "uniqueness",
+          "existing_user",
+          "conflict",
+          "==",
+          "validation"
+        ]
+      },
+      "difficulty": "hard"
+    },
+    {
+      "id": "BUG_009",
+      "file": "login.py",
+      "function": "reset_password",
+      "category": "information_disclosure",
+      "severity": "medium",
+      "security_relevant": true,
+      "description": "reset_password now returns 404 'User not found' instead of the deliberately-generic 'Invalid token' when the email has no account, re-introducing a user-enumeration oracle on the password reset endpoint.",
+      "injection": {
+        "find": "        # Don't reveal that the user doesn't exist - use same error as invalid token\n        raise HTTPException(status_code=400, detail=\"Invalid token\")\n",
+        "replace_with": "        # Don't reveal that the user doesn't exist - use same error as invalid token\n        raise HTTPException(status_code=404, detail=\"User not found\")\n"
+      },
+      "detection_hints": {
+        "must_mention_any": [
+          "enumeration",
+          "Invalid token",
+          "User not found",
+          "reveal",
+          "disclosure",
+          "404",
+          "reset"
+        ]
+      },
+      "difficulty": "hard"
+    },
+    {
+      "id": "BUG_010",
+      "file": "items.py",
+      "function": "update_item",
+      "category": "data_loss",
+      "severity": "medium",
+      "security_relevant": false,
+      "description": "PATCH update_item switched from exclude_unset=True to exclude_unset=False, so fields the client did NOT send are included in the update dict as their defaults and overwrite existing values -- a partial update now silently wipes untouched fields.",
+      "injection": {
+        "find": "    update_dict = item_in.model_dump(exclude_unset=True)\n",
+        "replace_with": "    update_dict = item_in.model_dump(exclude_unset=False)\n"
+      },
+      "detection_hints": {
+        "must_mention_any": [
+          "exclude_unset",
+          "model_dump",
+          "partial update",
+          "PATCH",
+          "overwrite",
+          "data loss",
+          "unset"
+        ]
+      },
+      "difficulty": "hard"
+    },
+    {
+      "id": "BUG_011",
+      "file": "users.py",
+      "function": "update_user_me",
+      "category": "mass_assignment",
+      "severity": "high",
+      "security_relevant": true,
+      "difficulty": "hard",
+      "description": "update_user_me binds the body to UserUpdate instead of UserUpdateMe. UserUpdate (via UserBase) includes is_superuser/is_active, and current_user.sqlmodel_update applies every supplied field -- so any user can PATCH /users/me with {\"is_superuser\": true} and self-escalate to admin (mass-assignment / over-posting).",
+      "injection": {
+        "find": "    *, session: SessionDep, user_in: UserUpdateMe, current_user: CurrentUser\n",
+        "replace_with": "    *, session: SessionDep, user_in: UserUpdate, current_user: CurrentUser\n"
+      },
+      "detection_hints": {
+        "must_mention_any": [
+          "mass assignment",
+          "mass-assignment",
+          "over-posting",
+          "UserUpdate",
+          "UserUpdateMe",
+          "is_superuser",
+          "privilege",
+          "escalation",
+          "self-update"
+        ]
+      }
+    },
+    {
+      "id": "BUG_012",
+      "file": "users.py",
+      "function": "delete_user",
+      "category": "orm_data_bleed",
+      "severity": "high",
+      "security_relevant": true,
+      "difficulty": "hard",
+      "description": "delete_user's cascade filter is inverted: delete(Item).where(col(Item.owner_id) == user_id) became != user_id. Deleting one user now wipes EVERY OTHER user's items and orphans the deleted user's -- catastrophic cross-tenant data loss.",
+      "injection": {
+        "find": "    statement = delete(Item).where(col(Item.owner_id) == user_id)\n",
+        "replace_with": "    statement = delete(Item).where(col(Item.owner_id) != user_id)\n"
+      },
+      "detection_hints": {
+        "must_mention_any": [
+          "delete",
+          "owner_id",
+          "!=",
+          "wrong filter",
+          "other users",
+          "data loss",
+          "cascade",
+          "every",
+          "all items",
+          "inverted"
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,200 @@
+{
+  "benchmark_name": "Spring PetClinic Bug Injection",
+  "version": 1,
+  "repo": "https://github.com/RouteFit-app/spring-petclinic",
+  "base_branch": "main",
+  "buggy_branch": "benchmark/buggy",
+  "created_at": "2026-06-19",
+  "tech_stack": "Java / Spring Boot",
+  "file_locations": {
+    "OwnerController.java": "src/main/java/org/springframework/samples/petclinic/owner/OwnerController.java",
+    "PetController.java": "src/main/java/org/springframework/samples/petclinic/owner/PetController.java",
+    "PetValidator.java": "src/main/java/org/springframework/samples/petclinic/owner/PetValidator.java",
+    "VisitController.java": "src/main/java/org/springframework/samples/petclinic/owner/VisitController.java",
+    "Owner.java": "src/main/java/org/springframework/samples/petclinic/owner/Owner.java"
+  },
+  "scoring": {
+    "detect_points": 10,
+    "correct_file_bonus": 3,
+    "correct_severity_bonus": 2,
+    "false_positive_penalty": -2,
+    "severity_weight": {
+      "high": 1.5,
+      "medium": 1.0,
+      "low": 0.5
+    }
+  },
+  "bugs": [
+    {
+      "id": "BUG_001",
+      "file": "OwnerController.java",
+      "function": "setAllowedFields",
+      "category": "broken_access_control",
+      "severity": "high",
+      "difficulty": "hard",
+      "security_relevant": true,
+      "description": "The @InitBinder disallowed-fields guard is gutted: setDisallowedFields(\"id\",\"*.id\") becomes setDisallowedFields() with no args, so the form can now bind the entity 'id'. Combined with the update endpoint this is a mass-assignment / IDOR vector -- a crafted POST can set or overwrite an arbitrary owner id.",
+      "injection": {
+        "find": "\t\tdataBinder.setDisallowedFields(\"id\", \"*.id\");",
+        "replace_with": "\t\tdataBinder.setDisallowedFields();"
+      },
+      "detection_hints": {
+        "must_mention_any": [
+          "setDisallowedFields",
+          "id",
+          "mass assignment",
+          "mass-assignment",
+          "IDOR",
+          "bind",
+          "InitBinder"
+        ]
+      }
+    },
+    {
+      "id": "BUG_002",
+      "file": "PetValidator.java",
+      "function": "validate",
+      "category": "validation_gap",
+      "severity": "medium",
+      "difficulty": "hard",
+      "security_relevant": false,
+      "description": "The 'name is required' check is removed from PetValidator, so a Pet can be created/updated with a blank name (PetValidator is the only thing enforcing it -- there is no @NotBlank on the Pet name).",
+      "injection": {
+        "find": "\t\t// name validation\n\t\tif (!StringUtils.hasText(name)) {\n\t\t\terrors.rejectValue(\"name\", REQUIRED, REQUIRED);\n\t\t}",
+        "replace_with": "\t\t// name validation"
+      },
+      "detection_hints": {
+        "must_mention_any": [
+          "StringUtils.hasText",
+          "name",
+          "REQUIRED",
+          "rejectValue",
+          "validation",
+          "required"
+        ]
+      }
+    },
+    {
+      "id": "BUG_003",
+      "file": "PetController.java",
+      "function": "processUpdateForm",
+      "category": "inverted_logic",
+      "severity": "medium",
+      "difficulty": "hard",
+      "security_relevant": false,
+      "description": "The duplicate-pet-name check is inverted: `!Objects.equals(existingPet.getId(), pet.getId())` becomes `Objects.equals(...)`. Now it flags a duplicate only when the existing pet IS the one being edited (blocking a no-op rename) and allows two different pets to share a name.",
+      "injection": {
+        "find": "\t\t\tif (existingPet != null && !Objects.equals(existingPet.getId(), pet.getId())) {",
+        "replace_with": "\t\t\tif (existingPet != null && Objects.equals(existingPet.getId(), pet.getId())) {"
+      },
+      "detection_hints": {
+        "must_mention_any": [
+          "existingPet",
+          "Objects.equals",
+          "getId",
+          "duplicate",
+          "name",
+          "inverted"
+        ]
+      }
+    },
+    {
+      "id": "BUG_004",
+      "file": "VisitController.java",
+      "function": "processNewVisitForm",
+      "category": "temporal_validation",
+      "severity": "medium",
+      "difficulty": "medium",
+      "security_relevant": false,
+      "description": "The visit-date guard is inverted: `!visit.getDate().isAfter(LocalDate.now())` becomes `visit.getDate().isAfter(...)`. Now FUTURE visit dates are rejected and PAST dates are accepted -- the opposite of the intended 'no past visits' rule.",
+      "injection": {
+        "find": "\t\tif (visit.getDate() != null && !visit.getDate().isAfter(LocalDate.now())) {",
+        "replace_with": "\t\tif (visit.getDate() != null && visit.getDate().isAfter(LocalDate.now())) {"
+      },
+      "detection_hints": {
+        "must_mention_any": [
+          "visit.getDate",
+          "isAfter",
+          "LocalDate.now",
+          "future",
+          "past",
+          "date"
+        ]
+      }
+    },
+    {
+      "id": "BUG_005",
+      "file": "OwnerController.java",
+      "function": "findPaginatedForOwnersLastName",
+      "category": "off_by_one",
+      "severity": "low",
+      "difficulty": "medium",
+      "security_relevant": false,
+      "description": "Pagination off-by-one: PageRequest.of(page - 1, pageSize) becomes PageRequest.of(page, pageSize). Spring Data pages are 0-based but the UI 'page' is 1-based, so page 1 now shows the second page of results and the first five owners are unreachable.",
+      "injection": {
+        "find": "\t\tPageable pageable = PageRequest.of(page - 1, pageSize);",
+        "replace_with": "\t\tPageable pageable = PageRequest.of(page, pageSize);"
+      },
+      "detection_hints": {
+        "must_mention_any": [
+          "PageRequest",
+          "page",
+          "pageSize",
+          "off-by-one",
+          "off by one",
+          "pagination",
+          "page - 1"
+        ]
+      }
+    },
+    {
+      "id": "BUG_006",
+      "file": "Owner.java",
+      "function": "getPet(Integer id)",
+      "category": "entity_identity",
+      "severity": "high",
+      "difficulty": "hard",
+      "security_relevant": false,
+      "description": "In Owner.getPet(Integer id) the persisted-pet guard is inverted: `if (!pet.isNew())` becomes `if (pet.isNew())`. The lookup now only considers unsaved (id-less) pets, so it never finds a saved pet by id and returns null. Downstream, PetController.updatePetDetails treats every edit as a new pet and adds a duplicate instead of updating -- silent data corruption that spans two files.",
+      "injection": {
+        "find": "\t\t\tif (!pet.isNew()) {",
+        "replace_with": "\t\t\tif (pet.isNew()) {"
+      },
+      "detection_hints": {
+        "must_mention_any": [
+          "getPet",
+          "isNew",
+          "pet",
+          "id",
+          "inverted",
+          "update",
+          "duplicate"
+        ]
+      }
+    },
+    {
+      "id": "BUG_007",
+      "file": "Owner.java",
+      "function": "city field",
+      "category": "validation_gap",
+      "severity": "medium",
+      "difficulty": "hard",
+      "security_relevant": false,
+      "description": "The @NotBlank constraint is removed from Owner.city, so an owner can be saved with a blank city while address and telephone remain required -- an easy-to-miss missing annotation.",
+      "injection": {
+        "find": "\t@Column\n\t@NotBlank\n\tprivate String city;",
+        "replace_with": "\t@Column\n\tprivate String city;"
+      },
+      "detection_hints": {
+        "must_mention_any": [
+          "@NotBlank",
+          "NotBlank",
+          "city",
+          "validation",
+          "required",
+          "blank"
+        ]
+      }
+    }
+  ]
+}

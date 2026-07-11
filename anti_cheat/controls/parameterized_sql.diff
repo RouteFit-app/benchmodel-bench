@@ -1,0 +1,9 @@
+diff --git a/app/orders.py b/app/orders.py
+--- a/app/orders.py
++++ b/app/orders.py
+@@ -18,7 +18,8 @@ def orders_for_user(conn, user_id):
+     cur = conn.cursor()
+-    cur.execute("SELECT id, total FROM orders WHERE user_id = " + str(user_id))
++    # bind the value as a parameter instead of building the string
++    cur.execute("SELECT id, total FROM orders WHERE user_id = %s", (user_id,))
+     return cur.fetchall()

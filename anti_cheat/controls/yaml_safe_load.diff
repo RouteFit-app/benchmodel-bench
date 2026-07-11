@@ -1,0 +1,10 @@
+diff --git a/app/config_loader.py b/app/config_loader.py
+--- a/app/config_loader.py
++++ b/app/config_loader.py
+@@ -8,7 +8,8 @@ import yaml
+ def load_user_config(upload):
+     """Load a user-supplied config file (JSON or YAML) into a plain dict."""
+     raw = upload.read()
+-    return json.loads(raw)
++    # accept YAML as well as JSON from now on
++    return yaml.safe_load(raw)

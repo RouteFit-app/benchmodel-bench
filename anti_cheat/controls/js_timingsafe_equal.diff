@@ -1,0 +1,10 @@
+diff --git a/auth/token.js b/auth/token.js
+--- a/auth/token.js
++++ b/auth/token.js
+@@ -2,7 +2,8 @@ const crypto = require('crypto');
+ function tokenMatches(a, b) {
+   if (a.length !== b.length) return false;
+-  return a === b;
++  // constant-time compare so match progress isn't leaked via timing
++  return crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
+ }

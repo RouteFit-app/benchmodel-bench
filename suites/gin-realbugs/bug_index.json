@@ -1,0 +1,119 @@
+{
+  "benchmark_name": "Gin Real Regressions",
+  "version": 1,
+  "repo": "https://github.com/gin-gonic/gin",
+  "base_branch": "master",
+  "buggy_branch": "benchmark/real-regression",
+  "created_at": "2026-06-24",
+  "tech_stack": "Go",
+  "provenance": "real-regression",
+  "note": "Each bug is the exact reverse of a real, merged Gin bug-fix, the regression that actually shipped before maintainers patched it. BUG_001 reverses the fix for CVE-2023-29401 (Content-Disposition filename header injection). No synthetic bugs; every bug links its upstream fix commit (and PR).",
+  "file_locations": {
+    "context.go": "context.go",
+    "gin.go": "gin.go"
+  },
+  "scoring": {
+    "detect_points": 10,
+    "correct_file_bonus": 3,
+    "correct_severity_bonus": 2,
+    "false_positive_penalty": -2,
+    "severity_weight": { "high": 1.5, "medium": 1.0, "low": 0.5 }
+  },
+  "bugs": [
+    {
+      "id": "BUG_001",
+      "file": "context.go",
+      "function": "Context.FileAttachment",
+      "category": "header_injection",
+      "owasp": "A03: Injection",
+      "severity": "medium",
+      "severity_note": "Recalibrated high->medium to match the official rating (CVSS 4.3, medium) for NVD CVE-2023-29401. The provenance (a real, assigned CVE) is the point, not an inflated severity.",
+      "security_relevant": true,
+      "difficulty": "hard",
+      "provenance": "real-regression",
+      "cve": "CVE-2023-29401",
+      "cvss": 4.3,
+      "fixed_by": "https://github.com/gin-gonic/gin/commit/2d4bbec941551479b1fdf1e54ece03e6e82a7e72 (PR #3556, CVE-2023-29401)",
+      "description": "Reverts the fix for CVE-2023-29401. In FileAttachment the ASCII branch interpolates the caller-supplied filename straight into the Content-Disposition header value without escaping quotes/backslashes. An attacker-controlled filename containing a double-quote (or a backslash before a backquote) breaks out of the quoted filename and injects additional header-field content. The real fix routed the filename through escapeQuotes(); reverting drops that call so the raw filename is concatenated again. A real, assigned CVE about response-header injection, reintroduced.",
+      "detection_hints": {
+        "must_mention_any": [
+          "Content-Disposition", "filename", "escape", "escapeQuotes", "header injection",
+          "injection", "quote", "backslash", "FileAttachment", "sanitiz", "CRLF", "unescaped"
+        ]
+      },
+      "injection": {
+        "find": "\tif isASCII(filename) {\n\t\tc.Writer.Header().Set(\"Content-Disposition\", `attachment; filename=\"`+escapeQuotes(filename)+`\"`)",
+        "replace_with": "\tif isASCII(filename) {\n\t\tc.Writer.Header().Set(\"Content-Disposition\", `attachment; filename=\"`+filename+`\"`)"
+      }
+    },
+    {
+      "id": "BUG_002",
+      "file": "context.go",
+      "function": "Context.initQueryCache",
+      "category": "nil_dereference",
+      "owasp": "Not applicable (correctness / DoS)",
+      "severity": "medium",
+      "security_relevant": false,
+      "difficulty": "medium",
+      "provenance": "real-regression",
+      "fixed_by": "https://github.com/gin-gonic/gin/commit/e0d46ded6cb6974d55a255ab122d1aa6ca0cd60e (PR #3969)",
+      "description": "Reverts the nil-guard in initQueryCache. The guard checked only `c.Request != nil` before calling `c.Request.URL.Query()`; if a request is constructed with a nil URL (common in unit tests and some middleware that build *http.Request directly), `c.Request.URL.Query()` dereferences a nil pointer and panics, taking down the handler. The real fix added `&& c.Request.URL != nil`. Reverting drops it, reintroducing the nil-pointer panic.",
+      "detection_hints": {
+        "must_mention_any": [
+          "URL", "nil", "Request.URL", "initQueryCache", "nil pointer", "panic",
+          "queryCache", "dereference", "Query()", "nil check"
+        ]
+      },
+      "injection": {
+        "find": "\tif c.queryCache == nil {\n\t\tif c.Request != nil && c.Request.URL != nil {",
+        "replace_with": "\tif c.queryCache == nil {\n\t\tif c.Request != nil {"
+      }
+    },
+    {
+      "id": "BUG_003",
+      "file": "context.go",
+      "function": "Context.NegotiateFormat",
+      "category": "index_out_of_range",
+      "owasp": "Not applicable (correctness / DoS)",
+      "severity": "medium",
+      "security_relevant": false,
+      "difficulty": "hard",
+      "provenance": "real-regression",
+      "fixed_by": "https://github.com/gin-gonic/gin/commit/7cb151bb4c4cfc6018a00a125422ff38a041b9f8 (PR #3397)",
+      "description": "Reverts the bounds fix in NegotiateFormat. The loop compares accepted[i] and offer[i] but only bounded i by len(accepted); when an offered MIME type is shorter than the accepted one, offer[i] reads past the end of the string slice and panics with index out of range, an attacker-influenceable DoS via the Accept header. The real fix added `&& i < len(offer)` to the loop condition. Reverting drops it, reintroducing the out-of-bounds panic.",
+      "detection_hints": {
+        "must_mention_any": [
+          "offer", "len(offer)", "index out of range", "NegotiateFormat", "panic",
+          "bounds", "accepted", "out of bounds", "slice", "Accept header"
+        ]
+      },
+      "injection": {
+        "find": "\t\t\ti := 0\n\t\t\tfor ; i < len(accepted) && i < len(offer); i++ {",
+        "replace_with": "\t\t\ti := 0\n\t\t\tfor ; i < len(accepted); i++ {"
+      }
+    },
+    {
+      "id": "BUG_004",
+      "file": "gin.go",
+      "function": "Engine.RunFd",
+      "category": "resource_leak",
+      "owasp": "Not applicable (correctness / resource exhaustion)",
+      "severity": "medium",
+      "security_relevant": false,
+      "difficulty": "medium",
+      "provenance": "real-regression",
+      "fixed_by": "https://github.com/gin-gonic/gin/commit/c3d5a28ed6d3849da820195b6774d212bcc038a9 (PR #4422)",
+      "description": "Reverts the resource-leak fix in RunFd. After wrapping the inherited file descriptor with os.NewFile, the code passes it to net.FileListener but never closes the *os.File, leaking a file descriptor on every RunFd call (descriptor exhaustion over a process's lifetime). The real fix added `defer f.Close()` immediately after os.NewFile. Reverting removes that defer, reintroducing the leak.",
+      "detection_hints": {
+        "must_mention_any": [
+          "f.Close", "defer", "Close", "RunFd", "file descriptor", "leak",
+          "resource leak", "os.NewFile", "FileListener", "fd"
+        ]
+      },
+      "injection": {
+        "find": "\tf := os.NewFile(uintptr(fd), fmt.Sprintf(\"fd@%d\", fd))\n\tdefer f.Close()\n\tlistener, err := net.FileListener(f)",
+        "replace_with": "\tf := os.NewFile(uintptr(fd), fmt.Sprintf(\"fd@%d\", fd))\n\tlistener, err := net.FileListener(f)"
+      }
+    }
+  ]
+}

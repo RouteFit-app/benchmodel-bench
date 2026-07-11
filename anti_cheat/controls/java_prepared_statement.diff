@@ -1,0 +1,12 @@
+diff --git a/src/main/java/app/UserDao.java b/src/main/java/app/UserDao.java
+--- a/src/main/java/app/UserDao.java
++++ b/src/main/java/app/UserDao.java
+@@ -18,9 +18,10 @@ public User findById(Connection conn, long id) throws SQLException {
+-        Statement st = conn.createStatement();
+-        ResultSet rs = st.executeQuery("SELECT id, email FROM users WHERE id = " + id);
++        // bound parameter via PreparedStatement instead of concatenation
++        PreparedStatement st = conn.prepareStatement("SELECT id, email FROM users WHERE id = ?");
++        st.setLong(1, id);
++        ResultSet rs = st.executeQuery();
+         return map(rs);
+     }

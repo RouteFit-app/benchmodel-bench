@@ -1,0 +1,130 @@
+{
+  "benchmark_name": "Cross-File Consistency",
+  "version": 1,
+  "repo": "https://github.com/RouteFit-app/benchmodel-fastapi-template",
+  "base_branch": "master",
+  "buggy_branch": "benchmark/crossfile",
+  "created_at": "2026-06-20",
+  "tech_stack": "Python / FastAPI",
+  "file_locations": {
+    "models.py": "backend/app/models.py",
+    "crud.py": "backend/app/crud.py"
+  },
+  "scoring": {
+    "detect_points": 10,
+    "correct_file_bonus": 3,
+    "correct_severity_bonus": 2,
+    "false_positive_penalty": -2,
+    "severity_weight": {
+      "high": 1.5,
+      "medium": 1.0,
+      "low": 0.5
+    }
+  },
+  "bugs": [
+    {
+      "id": "BUG_001",
+      "file": "models.py",
+      "function": "UserPublic",
+      "category": "api_contract_drift",
+      "severity": "medium",
+      "security_relevant": false,
+      "difficulty": "medium",
+      "description": "UserPublic (the API response schema) now declares a `phone` field, but nothing ever populates it: the User table model has no `phone` column and crud never sets one. The API advertises a field that is always null \u2014 the response contract no longer matches the data layer.",
+      "detection_hints": {
+        "must_mention_any": [
+          "phone",
+          "UserPublic",
+          "response",
+          "never set",
+          "not stored",
+          "not populated",
+          "always null",
+          "no source"
+        ]
+      },
+      "injection": {
+        "find": "class UserPublic(UserBase):\n    id: uuid.UUID\n    created_at: datetime | None = None\n",
+        "replace_with": "class UserPublic(UserBase):\n    id: uuid.UUID\n    created_at: datetime | None = None\n    phone: str | None = None\n"
+      }
+    },
+    {
+      "id": "BUG_002",
+      "file": "models.py",
+      "function": "UserCreate",
+      "category": "missing_persistence",
+      "severity": "high",
+      "security_relevant": false,
+      "difficulty": "hard",
+      "description": "UserCreate now requires a `referral_code` at signup, but it is silently discarded. The User table has no referral_code column, and crud.create_user does `User.model_validate(user_create, ...)`, which drops fields the table model doesn't declare. The API validates referral_code, then loses it on the way to the database.",
+      "detection_hints": {
+        "must_mention_any": [
+          "referral_code",
+          "UserCreate",
+          "model_validate",
+          "dropped",
+          "not persisted",
+          "not saved",
+          "no column",
+          "lost"
+        ]
+      },
+      "injection": {
+        "find": "class UserCreate(UserBase):\n    password: str = Field(min_length=8, max_length=128)\n",
+        "replace_with": "class UserCreate(UserBase):\n    password: str = Field(min_length=8, max_length=128)\n    referral_code: str = Field(min_length=4, max_length=32)\n"
+      }
+    },
+    {
+      "id": "BUG_003",
+      "file": "models.py",
+      "function": "UserUpdate",
+      "category": "stale_reference",
+      "severity": "high",
+      "security_relevant": true,
+      "difficulty": "hard",
+      "description": "UserUpdate renames its `password` field to `new_password`, but crud.update_user still branches on `if \"password\" in user_data` to hash and persist it. After this rename a password update is silently ignored \u2014 the key crud looks for no longer exists, so the new password is never hashed or saved. A change in models.py quietly breaks behavior in crud.py.",
+      "detection_hints": {
+        "must_mention_any": [
+          "new_password",
+          "password",
+          "update_user",
+          "user_data",
+          "crud",
+          "rename",
+          "silently",
+          "not hashed",
+          "ignored"
+        ]
+      },
+      "injection": {
+        "find": "    password: str | None = Field(default=None, min_length=8, max_length=128)\n",
+        "replace_with": "    new_password: str | None = Field(default=None, min_length=8, max_length=128)\n"
+      }
+    },
+    {
+      "id": "BUG_004",
+      "file": "models.py",
+      "function": "User",
+      "category": "missing_migration",
+      "severity": "medium",
+      "security_relevant": false,
+      "difficulty": "medium",
+      "description": "The User table model gains a `last_login` column, but no Alembic migration is added under app/alembic/versions/. Code and database schema drift apart: the column exists in the model but not in the DB, which breaks inserts and queries against the real database at runtime.",
+      "detection_hints": {
+        "must_mention_any": [
+          "last_login",
+          "alembic",
+          "migration",
+          "column",
+          "schema",
+          "drift",
+          "out of sync"
+        ]
+      },
+      "injection": {
+        "find": "class User(UserBase, table=True):\n    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)\n    hashed_password: str\n",
+        "replace_with": "class User(UserBase, table=True):\n    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)\n    hashed_password: str\n    last_login: datetime | None = None\n"
+      }
+    }
+  ]
+}

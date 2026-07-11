@@ -1,0 +1,9 @@
+diff --git a/app/cache.py b/app/cache.py
+--- a/app/cache.py
++++ b/app/cache.py
+@@ -3,7 +3,8 @@ import hashlib
+ def cache_key_for(url: str) -> str:
+     """Filename for a locally cached copy of a fetched URL. Not a security control."""
+-    return url.replace("/", "_").replace(":", "_")
++    # short, fixed-length key for the on-disk cache; not used for security
++    return hashlib.md5(url.encode(), usedforsecurity=False).hexdigest()

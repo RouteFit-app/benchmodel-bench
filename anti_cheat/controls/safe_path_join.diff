@@ -1,0 +1,12 @@
+diff --git a/app/downloads.py b/app/downloads.py
+--- a/app/downloads.py
++++ b/app/downloads.py
+@@ -4,7 +4,11 @@ BASE_DIR = "/srv/reports"
+ def report_path(filename: str) -> str:
+-    return os.path.join(BASE_DIR, filename)
++    # reduce to a bare filename and confirm the result stays inside BASE_DIR
++    safe_name = os.path.basename(filename)
++    full = os.path.realpath(os.path.join(BASE_DIR, safe_name))
++    if not full.startswith(os.path.realpath(BASE_DIR) + os.sep):
++        raise ValueError("invalid report name")
++    return full

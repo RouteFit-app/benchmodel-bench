@@ -1,0 +1,8 @@
+diff --git a/ui/profile.js b/ui/profile.js
+--- a/ui/profile.js
++++ b/ui/profile.js
+@@ -6,7 +6,8 @@ function renderName(el, userName) {
+-  el.innerHTML = userName;
++  // textContent does not parse HTML, so any markup in userName is inert
++  el.textContent = userName;
+ }

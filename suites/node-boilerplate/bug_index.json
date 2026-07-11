@@ -1,0 +1,204 @@
+{
+  "benchmark_name": "Node Security Config (boilerplate)",
+  "version": 1,
+  "repo": "https://github.com/hagopj13/node-express-boilerplate",
+  "base_branch": "master",
+  "buggy_branch": "benchmark/node-sec",
+  "created_at": "2026-06-23",
+  "tech_stack": "Node.js / Express",
+  "file_locations": {
+    "app.js": "src/app.js",
+    "config.js": "src/config/config.js",
+    "roles.js": "src/config/roles.js",
+    "rateLimiter.js": "src/middlewares/rateLimiter.js",
+    "user.model.js": "src/models/user.model.js",
+    "passport.js": "src/config/passport.js"
+  },
+  "scoring": {
+    "detect_points": 10,
+    "correct_file_bonus": 3,
+    "correct_severity_bonus": 2,
+    "false_positive_penalty": -2,
+    "severity_weight": {
+      "high": 1.5,
+      "medium": 1.0,
+      "low": 0.5
+    }
+  },
+  "bugs": [
+    {
+      "id": "BUG_001",
+      "file": "app.js",
+      "function": "middleware stack",
+      "category": "injection",
+      "owasp": "A03: Injection",
+      "severity": "high",
+      "security_relevant": true,
+      "difficulty": "medium",
+      "description": "The `app.use(mongoSanitize())` middleware was removed from the request pipeline. express-mongo-sanitize strips keys containing '$' and '.' from req.body/req.query/req.params; without it, an attacker can send `{\"email\": {\"$gt\": \"\"}}` style payloads that Mongoose interprets as query operators. On the unauthenticated login route this is a NoSQL injection / authentication bypass. The xss() sanitizer is still there, so only the NoSQL guard is gone.",
+      "detection_hints": {
+        "must_mention_any": [
+          "mongoSanitize",
+          "mongo-sanitize",
+          "NoSQL",
+          "NoSQL injection",
+          "$gt",
+          "operator injection",
+          "sanitize",
+          "query operator",
+          "injection",
+          "Mongoose"
+        ]
+      },
+      "injection": {
+        "find": "app.use(xss());\napp.use(mongoSanitize());",
+        "replace_with": "app.use(xss());"
+      }
+    },
+    {
+      "id": "BUG_002",
+      "file": "config.js",
+      "function": "envVarsSchema",
+      "category": "cryptographic_failure",
+      "owasp": "A02: Cryptographic Failures",
+      "severity": "high",
+      "security_relevant": true,
+      "difficulty": "easy",
+      "description": "The JWT signing secret env var was changed from `Joi.string().required()` to `Joi.string().default('secret')`. The config-validation guard that refused to boot without a real JWT_SECRET is gone, so if the env var is unset the app silently runs with the well-known literal 'secret' as its signing key, and every token becomes forgeable. Weak/defaulted signing secret plus a removed fail-fast config check.",
+      "detection_hints": {
+        "must_mention_any": [
+          "JWT_SECRET",
+          "default('secret')",
+          "required",
+          "signing key",
+          "secret",
+          "weak secret",
+          "forge",
+          "config validation",
+          "Joi",
+          "fallback"
+        ]
+      },
+      "injection": {
+        "find": "    JWT_SECRET: Joi.string().required().description('JWT secret key'),",
+        "replace_with": "    JWT_SECRET: Joi.string().default('secret').description('JWT secret key'),"
+      }
+    },
+    {
+      "id": "BUG_003",
+      "file": "roles.js",
+      "function": "allRoles",
+      "category": "broken_access_control",
+      "owasp": "A01: Broken Access Control",
+      "severity": "high",
+      "security_relevant": true,
+      "difficulty": "easy",
+      "description": "The `user` role was granted the admin rights `['getUsers', 'manageUsers']`. roleRights drives the auth middleware's permission check, so now every ordinary registered user can list and manage (create/update/delete) all other user accounts. Broken access control / privilege escalation by misconfigured role-permission map, the entire admin/user distinction collapses.",
+      "detection_hints": {
+        "must_mention_any": [
+          "user",
+          "admin",
+          "getUsers",
+          "manageUsers",
+          "role",
+          "rights",
+          "privilege",
+          "escalation",
+          "access control",
+          "permissions"
+        ]
+      },
+      "injection": {
+        "find": "const allRoles = {\n  user: [],\n  admin: ['getUsers', 'manageUsers'],\n};",
+        "replace_with": "const allRoles = {\n  user: ['getUsers', 'manageUsers'],\n  admin: ['getUsers', 'manageUsers'],\n};"
+      }
+    },
+    {
+      "id": "BUG_004",
+      "file": "rateLimiter.js",
+      "function": "authLimiter",
+      "category": "security_misconfiguration",
+      "owasp": "A07: Identification and Authentication Failures",
+      "severity": "medium",
+      "security_relevant": true,
+      "difficulty": "easy",
+      "description": "The auth rate limiter's `max` was raised from 20 to 100000 per 15-minute window, which effectively disables it. The limiter guards /v1/auth (login, register, forgot-password) against brute-force and credential-stuffing; at 100000 attempts per window there is no meaningful throttle. Security misconfiguration that re-opens online password guessing.",
+      "detection_hints": {
+        "must_mention_any": [
+          "rate limit",
+          "rateLimiter",
+          "max",
+          "100000",
+          "brute force",
+          "brute-force",
+          "credential stuffing",
+          "throttle",
+          "authLimiter",
+          "misconfiguration"
+        ]
+      },
+      "injection": {
+        "find": "  windowMs: 15 * 60 * 1000,\n  max: 20,\n  skipSuccessfulRequests: true,",
+        "replace_with": "  windowMs: 15 * 60 * 1000,\n  max: 100000,\n  skipSuccessfulRequests: true,"
+      }
+    },
+    {
+      "id": "BUG_005",
+      "file": "user.model.js",
+      "function": "userSchema password field",
+      "category": "sensitive_data_exposure",
+      "owasp": "A02: Cryptographic Failures",
+      "severity": "high",
+      "security_relevant": true,
+      "difficulty": "medium",
+      "description": "The `private: true` flag was removed from the password schema field. The toJSON plugin only strips fields marked private, so the bcrypt password hash is now serialized into every user object the API returns (registration response, GET /users, etc.). Sensitive data exposure: password hashes leak to any client, enabling offline cracking.",
+      "detection_hints": {
+        "must_mention_any": [
+          "private",
+          "toJSON",
+          "password",
+          "hash",
+          "exposure",
+          "serialized",
+          "leak",
+          "response",
+          "sensitive",
+          "strip"
+        ]
+      },
+      "injection": {
+        "find": "\n      private: true, // used by the toJSON plugin",
+        "replace_with": ""
+      }
+    },
+    {
+      "id": "BUG_006",
+      "file": "passport.js",
+      "function": "jwtVerify",
+      "category": "broken_authentication",
+      "owasp": "A07: Identification and Authentication Failures",
+      "severity": "high",
+      "security_relevant": true,
+      "difficulty": "medium",
+      "description": "The JWT strategy's token-type guard was removed. Previously jwtVerify threw on any token whose `payload.type` was not ACCESS; now refresh, reset-password, and verify-email tokens are all accepted as access tokens for authenticating API requests. Token-type confusion: a long-lived refresh token (or a reset-password token mailed to a user) can be replayed as a session credential.",
+      "detection_hints": {
+        "must_mention_any": [
+          "token type",
+          "payload.type",
+          "ACCESS",
+          "tokenTypes",
+          "refresh token",
+          "type check",
+          "confusion",
+          "jwtVerify",
+          "Invalid token type",
+          "authentication"
+        ]
+      },
+      "injection": {
+        "find": "    if (payload.type !== tokenTypes.ACCESS) {\n      throw new Error('Invalid token type');\n    }\n    const user = await User.findById(payload.sub);",
+        "replace_with": "    const user = await User.findById(payload.sub);"
+      }
+    }
+  ]
+}

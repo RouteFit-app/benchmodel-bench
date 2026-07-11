@@ -1,0 +1,48 @@
+{
+  "benchmark_name": "Semantic Kernel Real Regressions",
+  "version": 1,
+  "repo": "https://github.com/microsoft/semantic-kernel",
+  "base_branch": "main",
+  "buggy_branch": "benchmark/real-regression",
+  "created_at": "2026-06-25",
+  "tech_stack": "AI Frameworks",
+  "provenance": "real-regression",
+  "note": "Reverses the fix for CVE-2026-26030 (CVSS 9.8), the eval()-based RCE in Microsoft Semantic Kernel's Python InMemoryVectorStore. A filter expression that can be sourced from attacker-controlled vector-store content was run through eval(); the fix replaced it with a restricted AST evaluator. Reverting reintroduces eval() on untrusted input, a diff-visible code-injection sink. (We initially targeted the .NET CVE-2026-25592 tool-exposure bug, but re-adding a [KernelFunction] attribute is indistinguishable from a feature in a diff, so it isn't a fair diff-review target; the eval() bug is.)",
+  "file_locations": {
+    "in_memory.py": "python/semantic_kernel/connectors/in_memory.py"
+  },
+  "scoring": {
+    "detect_points": 10,
+    "correct_file_bonus": 3,
+    "correct_severity_bonus": 2,
+    "false_positive_penalty": -2,
+    "severity_weight": { "high": 1.5, "medium": 1.0, "low": 0.5 }
+  },
+  "bugs": [
+    {
+      "id": "BUG_001",
+      "file": "in_memory.py",
+      "function": "InMemoryCollection._parse_and_validate_filter",
+      "category": "code_injection_rce",
+      "owasp": "A03: Injection",
+      "severity": "high",
+      "severity_note": "The advisory rates CVE-2026-26030 CVSS 9.8 (critical); the board's scale tops out at 'high', so it's weighted at the ceiling, not inflated.",
+      "security_relevant": true,
+      "difficulty": "medium",
+      "provenance": "real-regression",
+      "cve": "CVE-2026-26030",
+      "fixed_by": "https://github.com/microsoft/semantic-kernel (CVE-2026-26030, fixed in Python semantic-kernel 1.39.4; 'When prompts become shells', Microsoft Security, 2026-05-07)",
+      "description": "Reverts the fix for CVE-2026-26030. In InMemoryVectorStore's _parse_and_validate_filter, a `return eval(filter_str)` is inserted at the top of the function, short-circuiting the entire safe AST-allowlist validation and executing the filter string directly with eval(). The filter can be derived from attacker-controlled content in the vector store itself, so a poisoned record injected into a RAG corpus executes arbitrary Python the moment a search query triggers filtering, an unauthenticated RCE. The real fix replaced eval() with a restricted AST evaluator (allowlisted node types, blocked dunder attributes, name restrictions, literal-size limits). Reverting reintroduces the eval() sink. The reviewer must flag that eval() on a filter string sourced from untrusted data is a code-injection / RCE vector, regardless of the surrounding validation that it bypasses.",
+      "detection_hints": {
+        "must_mention_any": [
+          "eval", "eval(", "code injection", "RCE", "remote code execution", "untrusted",
+          "filter", "_parse_and_validate_filter", "arbitrary code", "sandbox", "ast", "bypass"
+        ]
+      },
+      "injection": {
+        "find": "        if len(filter_str) > self.max_filter_source_length:\n            raise VectorStoreOperationException(\"Filter string exceeds the maximum allowed length.\")\n\n        try:\n            tree = ast.parse(filter_str, mode=\"eval\")",
+        "replace_with": "        if len(filter_str) > self.max_filter_source_length:\n            raise VectorStoreOperationException(\"Filter string exceeds the maximum allowed length.\")\n\n        return eval(filter_str)\n\n        try:\n            tree = ast.parse(filter_str, mode=\"eval\")"
+      }
+    }
+  ]
+}

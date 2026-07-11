@@ -1,0 +1,278 @@
+{
+  "benchmark_name": "React Frontend Bug Injection",
+  "version": 1,
+  "repo": "https://github.com/RouteFit-app/benchmodel-fastapi-template",
+  "base_branch": "master",
+  "buggy_branch": "benchmark/buggy-react",
+  "created_at": "2026-06-19",
+  "tech_stack": "React / Frontend",
+  "_tech_stack_note": "Runs are tagged with the BenchModel PROJECT's tech_stack, not this field. Create/point at a project with tech_stack = 'React / Frontend' and is_benchmark_project = true; this key is documentation only.",
+  "file_locations": {
+    "AddItem.tsx": "frontend/src/components/Items/AddItem.tsx",
+    "AddUser.tsx": "frontend/src/components/Admin/AddUser.tsx",
+    "EditUser.tsx": "frontend/src/components/Admin/EditUser.tsx",
+    "ChangePassword.tsx": "frontend/src/components/UserSettings/ChangePassword.tsx",
+    "UserInformation.tsx": "frontend/src/components/UserSettings/UserInformation.tsx",
+    "DataTable.tsx": "frontend/src/components/Common/DataTable.tsx",
+    "theme-provider.tsx": "frontend/src/components/theme-provider.tsx",
+    "useAuth.ts": "frontend/src/hooks/useAuth.ts",
+    "items.tsx": "frontend/src/routes/_layout/items.tsx"
+  },
+  "scoring": {
+    "detect_points": 10,
+    "correct_file_bonus": 3,
+    "correct_severity_bonus": 2,
+    "false_positive_penalty": -2,
+    "severity_weight": {
+      "high": 1.5,
+      "medium": 1.0,
+      "low": 0.5
+    }
+  },
+  "bugs": [
+    {
+      "id": "BUG_001",
+      "file": "AddItem.tsx",
+      "function": "AddItem mutation onSettled",
+      "category": "stale_cache",
+      "severity": "high",
+      "difficulty": "medium",
+      "security_relevant": false,
+      "description": "After creating an item the mutation invalidates the wrong React Query cache key ([\"users\"] instead of [\"items\"]). The items list query is never refetched, so a newly created item does not appear until a manual reload, while an unrelated users query is needlessly refetched.",
+      "injection": {
+        "find": "      queryClient.invalidateQueries({ queryKey: [\"items\"] })",
+        "replace_with": "      queryClient.invalidateQueries({ queryKey: [\"users\"] })"
+      },
+      "detection_hints": {
+        "must_mention_any": [
+          "invalidateQueries",
+          "queryKey",
+          "items",
+          "wrong key",
+          "stale",
+          "refetch",
+          "cache"
+        ]
+      }
+    },
+    {
+      "id": "BUG_002",
+      "file": "useAuth.ts",
+      "function": "login",
+      "category": "missing_await",
+      "severity": "high",
+      "difficulty": "hard",
+      "security_relevant": false,
+      "description": "The await was dropped from the loginAccessToken call, so `response` is a Promise rather than the resolved token object. `response.access_token` is undefined, so the string 'undefined' (or undefined) is written to localStorage and the user is never actually authenticated even on correct credentials.",
+      "injection": {
+        "find": "    const response = await LoginService.loginAccessToken({",
+        "replace_with": "    const response = LoginService.loginAccessToken({"
+      },
+      "detection_hints": {
+        "must_mention_any": [
+          "await",
+          "async",
+          "promise",
+          "access_token",
+          "response",
+          "loginAccessToken"
+        ]
+      }
+    },
+    {
+      "id": "BUG_003",
+      "file": "useAuth.ts",
+      "function": "useAuth currentUser query",
+      "category": "broken_conditional",
+      "severity": "high",
+      "difficulty": "hard",
+      "security_relevant": true,
+      "description": "The `enabled` guard on the currentUser query was inverted (enabled: isLoggedIn() -> enabled: !isLoggedIn()). The current user is now fetched only while logged OUT and skipped while logged in, so `user` is always undefined for authenticated sessions, breaking every gate that depends on it.",
+      "injection": {
+        "find": "    enabled: isLoggedIn(),",
+        "replace_with": "    enabled: !isLoggedIn(),"
+      },
+      "detection_hints": {
+        "must_mention_any": [
+          "enabled",
+          "isLoggedIn",
+          "useQuery",
+          "currentUser",
+          "inverted",
+          "negat"
+        ]
+      }
+    },
+    {
+      "id": "BUG_004",
+      "file": "theme-provider.tsx",
+      "function": "ThemeProvider useEffect",
+      "category": "stale_closure",
+      "severity": "medium",
+      "difficulty": "hard",
+      "security_relevant": false,
+      "description": "`theme` was removed from the useEffect dependency array, so the effect that applies the theme class to <html> and subscribes to the system color-scheme listener only runs on mount. Switching theme updates state but never re-applies the DOM class or rebinds the listener with the new value — a stale-closure dependency bug.",
+      "injection": {
+        "find": "  }, [theme, updateTheme, getResolvedTheme])",
+        "replace_with": "  }, [updateTheme, getResolvedTheme])"
+      },
+      "detection_hints": {
+        "must_mention_any": [
+          "dependency",
+          "deps",
+          "useEffect",
+          "theme",
+          "stale",
+          "exhaustive",
+          "array"
+        ]
+      }
+    },
+    {
+      "id": "BUG_005",
+      "file": "ChangePassword.tsx",
+      "function": "formSchema",
+      "category": "validation_gap",
+      "severity": "medium",
+      "difficulty": "hard",
+      "security_relevant": false,
+      "description": "The zod `.refine()` that checks new_password === confirm_password was removed from the Change Password schema. The client no longer validates that the two fields match, so a user who mistypes the confirmation submits a password they did not intend, with no error shown.",
+      "injection": {
+        "find": "  })\n  .refine((data) => data.new_password === data.confirm_password, {\n    message: \"The passwords don't match\",\n    path: [\"confirm_password\"],\n  })",
+        "replace_with": "  })"
+      },
+      "detection_hints": {
+        "must_mention_any": [
+          "refine",
+          "confirm_password",
+          "passwords",
+          "match",
+          "validation",
+          "zod"
+        ]
+      }
+    },
+    {
+      "id": "BUG_006",
+      "file": "DataTable.tsx",
+      "function": "DataTable pagination footer",
+      "category": "off_by_one",
+      "severity": "low",
+      "difficulty": "medium",
+      "security_relevant": false,
+      "description": "The '+ 1' was dropped from the 'Showing X to Y' range start, which uses a 0-based pageIndex. The footer now reads 'Showing 0 to N' on the first page instead of 'Showing 1 to N' — an off-by-one in the displayed row range.",
+      "injection": {
+        "find": "              {table.getState().pagination.pageIndex *\n                table.getState().pagination.pageSize +\n                1}{\" \"}",
+        "replace_with": "              {table.getState().pagination.pageIndex *\n                table.getState().pagination.pageSize}{\" \"}"
+      },
+      "detection_hints": {
+        "must_mention_any": [
+          "pageIndex",
+          "pageSize",
+          "off-by-one",
+          "off by one",
+          "+ 1",
+          "showing",
+          "pagination"
+        ]
+      }
+    },
+    {
+      "id": "BUG_007",
+      "file": "UserInformation.tsx",
+      "function": "UserInformation Save button",
+      "category": "inverted_conditional",
+      "severity": "medium",
+      "difficulty": "medium",
+      "security_relevant": false,
+      "description": "The Save button's disabled condition was inverted (disabled={!form.formState.isDirty} -> disabled={form.formState.isDirty}). Save is now disabled exactly when there ARE unsaved changes and enabled when there are none, so the user can never submit an edited profile.",
+      "injection": {
+        "find": "                  disabled={!form.formState.isDirty}",
+        "replace_with": "                  disabled={form.formState.isDirty}"
+      },
+      "detection_hints": {
+        "must_mention_any": [
+          "isDirty",
+          "disabled",
+          "formState",
+          "save",
+          "inverted",
+          "negat"
+        ]
+      }
+    },
+    {
+      "id": "BUG_008",
+      "file": "EditUser.tsx",
+      "function": "EditUser onSubmit",
+      "category": "data_loss",
+      "severity": "high",
+      "difficulty": "hard",
+      "security_relevant": true,
+      "description": "The 'omit empty password' guard was inverted (if (!submitData.password) -> if (submitData.password)). Now the password is deleted from the payload precisely when the admin DID type a new one, and an empty-string password is sent when the field was left blank — so admins can never set a password and may push an empty password to the API.",
+      "injection": {
+        "find": "    if (!submitData.password) {\n      delete submitData.password\n    }",
+        "replace_with": "    if (submitData.password) {\n      delete submitData.password\n    }"
+      },
+      "detection_hints": {
+        "must_mention_any": [
+          "submitData",
+          "password",
+          "delete",
+          "empty",
+          "inverted",
+          "condition"
+        ]
+      }
+    },
+    {
+      "id": "BUG_009",
+      "file": "items.tsx",
+      "function": "getItemsQueryOptions",
+      "category": "incomplete_fetch",
+      "severity": "medium",
+      "difficulty": "hard",
+      "security_relevant": false,
+      "description": "The items query limit was silently reduced from 100 to 10. Only the first 10 items are ever fetched, and because the table paginates client-side over whatever it received, users with more than 10 items silently lose access to the rest with no indication anything is missing.",
+      "injection": {
+        "find": "    queryFn: () => ItemsService.readItems({ skip: 0, limit: 100 }),",
+        "replace_with": "    queryFn: () => ItemsService.readItems({ skip: 0, limit: 10 }),"
+      },
+      "detection_hints": {
+        "must_mention_any": [
+          "limit",
+          "readItems",
+          "100",
+          "10",
+          "skip",
+          "fetch",
+          "pagination"
+        ]
+      }
+    },
+    {
+      "id": "BUG_010",
+      "file": "AddUser.tsx",
+      "function": "AddUser mutation onSuccess",
+      "category": "stale_state",
+      "severity": "low",
+      "difficulty": "hard",
+      "security_relevant": false,
+      "description": "form.reset() was removed from the Add User success handler. After creating a user the dialog closes but the form keeps the previous values, so reopening Add User shows the last submission's email/name/flags pre-filled instead of an empty form.",
+      "injection": {
+        "find": "      showSuccessToast(\"User created successfully\")\n      form.reset()\n      setIsOpen(false)",
+        "replace_with": "      showSuccessToast(\"User created successfully\")\n      setIsOpen(false)"
+      },
+      "detection_hints": {
+        "must_mention_any": [
+          "form.reset",
+          "reset",
+          "stale",
+          "defaultValues",
+          "cleared",
+          "onSuccess"
+        ]
+      }
+    }
+  ]
+}

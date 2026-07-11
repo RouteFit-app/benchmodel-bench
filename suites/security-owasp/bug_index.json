@@ -1,0 +1,205 @@
+{
+  "benchmark_name": "OWASP Top 10",
+  "version": 1,
+  "repo": "https://github.com/RouteFit-app/benchmodel-fastapi-template",
+  "base_branch": "master",
+  "buggy_branch": "benchmark/owasp",
+  "created_at": "2026-06-21",
+  "tech_stack": "Security",
+  "file_locations": {
+    "items.py": "backend/app/api/routes/items.py",
+    "users.py": "backend/app/api/routes/users.py",
+    "deps.py": "backend/app/api/deps.py",
+    "config.py": "backend/app/core/config.py",
+    "crud.py": "backend/app/crud.py",
+    "login.py": "backend/app/api/routes/login.py"
+  },
+  "scoring": {
+    "detect_points": 10,
+    "correct_file_bonus": 3,
+    "correct_severity_bonus": 2,
+    "false_positive_penalty": -2,
+    "severity_weight": {
+      "high": 1.5,
+      "medium": 1.0,
+      "low": 0.5
+    }
+  },
+  "bugs": [
+    {
+      "id": "BUG_001",
+      "file": "items.py",
+      "function": "delete_item",
+      "category": "broken_access_control",
+      "owasp": "A01: Broken Access Control",
+      "severity": "high",
+      "security_relevant": true,
+      "difficulty": "medium",
+      "description": "delete_item no longer checks ownership. The guard `if not current_user.is_superuser and (item.owner_id != current_user.id): raise 403` was removed, so any authenticated user can delete any other user's item just by guessing/iterating its UUID. Classic IDOR / broken object-level authorization — the endpoint authenticates the caller but never authorizes the action against the target object.",
+      "detection_hints": {
+        "must_mention_any": [
+          "delete_item",
+          "owner_id",
+          "ownership",
+          "IDOR",
+          "object-level",
+          "access control",
+          "authorization",
+          "any user can delete",
+          "not enough permissions",
+          "missing check"
+        ]
+      },
+      "injection": {
+        "find": "    item = session.get(Item, id)\n    if not item:\n        raise HTTPException(status_code=404, detail=\"Item not found\")\n    if not current_user.is_superuser and (item.owner_id != current_user.id):\n        raise HTTPException(status_code=403, detail=\"Not enough permissions\")\n    session.delete(item)",
+        "replace_with": "    item = session.get(Item, id)\n    if not item:\n        raise HTTPException(status_code=404, detail=\"Item not found\")\n    session.delete(item)"
+      }
+    },
+    {
+      "id": "BUG_002",
+      "file": "users.py",
+      "function": "read_users",
+      "category": "broken_access_control",
+      "owasp": "A01: Broken Access Control",
+      "severity": "high",
+      "security_relevant": true,
+      "difficulty": "medium",
+      "description": "The `read_users` endpoint lost its `dependencies=[Depends(get_current_active_superuser)]` guard. With the dependency gone the route has no authentication or authorization at all (it doesn't even take CurrentUser), so anyone can enumerate every user account — emails and account metadata — with an unauthenticated GET /users/. Missing function-level access control / PII exposure.",
+      "detection_hints": {
+        "must_mention_any": [
+          "read_users",
+          "get_current_active_superuser",
+          "dependency",
+          "superuser",
+          "unauthenticated",
+          "enumerate",
+          "function-level",
+          "missing auth",
+          "list all users",
+          "PII"
+        ]
+      },
+      "injection": {
+        "find": "@router.get(\n    \"/\",\n    dependencies=[Depends(get_current_active_superuser)],\n    response_model=UsersPublic,\n)\ndef read_users(session: SessionDep, skip: int = 0, limit: int = 100) -> Any:",
+        "replace_with": "@router.get(\n    \"/\",\n    response_model=UsersPublic,\n)\ndef read_users(session: SessionDep, skip: int = 0, limit: int = 100) -> Any:"
+      }
+    },
+    {
+      "id": "BUG_003",
+      "file": "deps.py",
+      "function": "get_current_user",
+      "category": "broken_authentication",
+      "owasp": "A07: Identification and Authentication Failures",
+      "severity": "high",
+      "security_relevant": true,
+      "difficulty": "hard",
+      "description": "get_current_user now decodes the JWT with `options={\"verify_signature\": False}`. The signature is no longer checked, so an attacker can forge a token with any `sub` (any user id, including a superuser's) and it will be accepted. Complete authentication bypass / privilege escalation — the secret key becomes irrelevant.",
+      "detection_hints": {
+        "must_mention_any": [
+          "verify_signature",
+          "signature",
+          "jwt.decode",
+          "forge",
+          "unsigned",
+          "authentication bypass",
+          "verify_signature\": False",
+          "not verified",
+          "impersonate",
+          "any token"
+        ]
+      },
+      "injection": {
+        "find": "        payload = jwt.decode(\n            token, settings.SECRET_KEY, algorithms=[security.ALGORITHM]\n        )",
+        "replace_with": "        payload = jwt.decode(\n            token,\n            settings.SECRET_KEY,\n            algorithms=[security.ALGORITHM],\n            options={\"verify_signature\": False},\n        )"
+      }
+    },
+    {
+      "id": "BUG_004",
+      "file": "config.py",
+      "function": "Settings",
+      "category": "cryptographic_failure",
+      "owasp": "A02: Cryptographic Failures",
+      "severity": "high",
+      "security_relevant": true,
+      "difficulty": "easy",
+      "description": "SECRET_KEY changed from a per-deploy random value `secrets.token_urlsafe(32)` to a hardcoded literal `\"dev-secret-key-change-me\"`. Anyone who has seen the source (it's a public template) knows the signing key and can mint valid JWTs for any user. Hardcoded/weak secret — a cryptographic failure that defeats the entire token scheme.",
+      "detection_hints": {
+        "must_mention_any": [
+          "SECRET_KEY",
+          "hardcoded",
+          "hard-coded",
+          "hard coded",
+          "dev-secret-key",
+          "token_urlsafe",
+          "static secret",
+          "predictable",
+          "default secret",
+          "forge"
+        ]
+      },
+      "injection": {
+        "find": "    SECRET_KEY: str = secrets.token_urlsafe(32)",
+        "replace_with": "    SECRET_KEY: str = \"dev-secret-key-change-me\""
+      }
+    },
+    {
+      "id": "BUG_005",
+      "file": "crud.py",
+      "function": "get_user_by_email",
+      "category": "injection",
+      "owasp": "A03: Injection",
+      "severity": "high",
+      "security_relevant": true,
+      "difficulty": "medium",
+      "description": "get_user_by_email was changed from a parameterized SQLModel `select(User).where(User.email == email)` to a raw `text(f\"SELECT id FROM ...email = '{email}'\")` with the email interpolated directly into the SQL string. This is a textbook SQL injection: a crafted email like `' OR '1'='1` (reachable from the unauthenticated login and password-recovery endpoints) breaks out of the string literal.",
+      "detection_hints": {
+        "must_mention_any": [
+          "SQL injection",
+          "SQLi",
+          "f-string",
+          "text(",
+          "interpolat",
+          "parameterized",
+          "raw SQL",
+          "get_user_by_email",
+          "string concatenation",
+          "injection"
+        ]
+      },
+      "injection": {
+        "find": "def get_user_by_email(*, session: Session, email: str) -> User | None:\n    statement = select(User).where(User.email == email)\n    session_user = session.exec(statement).first()\n    return session_user",
+        "replace_with": "def get_user_by_email(*, session: Session, email: str) -> User | None:\n    from sqlalchemy import text\n\n    query = text(f\"SELECT id FROM \\\"user\\\" WHERE email = '{email}'\")\n    row = session.execute(query).first()\n    return session.get(User, row[0]) if row else None"
+      }
+    },
+    {
+      "id": "BUG_006",
+      "file": "login.py",
+      "function": "login_access_token",
+      "category": "logging_failure",
+      "owasp": "A09: Security Logging and Monitoring Failures",
+      "severity": "high",
+      "severity_note": "Recalibrated medium->high after the first pooled run: Claude and Gemini independently rated this high both runs, DeepSeek high once. Logging plaintext credentials (CWE-532) is defensibly high, and the human-owned key was the lone 'medium'. Documented as a public bias-check. GPT still diverges (rated it 'low').",
+      "security_relevant": true,
+      "difficulty": "easy",
+      "description": "login_access_token now prints the submitted email and plaintext password to stdout on every login attempt. Credentials end up in application logs (and any log aggregator), exposing them to anyone with log access and surviving in retention. Sensitive-data-in-logs — you should never log raw passwords.",
+      "detection_hints": {
+        "must_mention_any": [
+          "print",
+          "log",
+          "logging",
+          "plaintext password",
+          "password",
+          "credentials",
+          "sensitive",
+          "stdout",
+          "exposure",
+          "logs"
+        ]
+      },
+      "injection": {
+        "find": "    user = crud.authenticate(\n        session=session, email=form_data.username, password=form_data.password\n    )\n    if not user:\n        raise HTTPException(status_code=400, detail=\"Incorrect email or password\")",
+        "replace_with": "    print(f\"[login] attempt email={form_data.username} password={form_data.password}\")\n    user = crud.authenticate(\n        session=session, email=form_data.username, password=form_data.password\n    )\n    if not user:\n        raise HTTPException(status_code=400, detail=\"Incorrect email or password\")"
+      }
+    }
+  ]
+}

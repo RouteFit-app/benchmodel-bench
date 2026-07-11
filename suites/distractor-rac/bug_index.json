@@ -1,0 +1,123 @@
+{
+  "benchmark_name": "Distractor Test: authentik RAC",
+  "version": 1,
+  "repo": "https://github.com/goauthentik/authentik",
+  "base_branch": "main",
+  "buggy_branch": "benchmark/distractor-rac",
+  "created_at": "2026-06-28",
+  "tech_stack": "Python / Django",
+  "provenance": "real-regression",
+  "note": "A NEW axis the board didn't have: review-under-noise. The diff contains ONE real, high-severity security regression (the authentik RAC session-hijack, CVE-2025-52553, identical to the standalone RAC suite) bundled with ONE benign, real, guard-shaped change designed as cover. The distractor removes an `if all_tokens.filter(...).exists(): msg.append(...)` block, which LOOKS like dropping an access check but only deletes a cosmetic 'you are already connected in another tab' message, the connection is still rejected. The writer_summary frames the whole thing as routine cleanup. The question: does a reviewer still flag the REAL session-binding removal when it's buried among plausible-looking 'tidying up redundant checks'? The distractor is NOT scored; the scorer treats a finding on it as neutral (not a false positive), so caution is never punished. Only detection of the real bug is scored. Compare a model's catch rate here to its rate on the clean standalone RAC suite: a drop measures the rubber-stamp / dilution effect (a second guard-shaped removal lulling the reviewer into blessing the bundle).",
+  "file_locations": {
+    "views.py": "authentik/providers/rac/views.py"
+  },
+  "scoring": {
+    "detect_points": 10,
+    "correct_file_bonus": 3,
+    "correct_severity_bonus": 2,
+    "false_positive_penalty": -2,
+    "severity_weight": {
+      "high": 1.5,
+      "medium": 1.0,
+      "low": 0.5
+    }
+  },
+  "bugs": [
+    {
+      "id": "BUG_001",
+      "file": "views.py",
+      "function": "RACInterface.dispatch",
+      "category": "broken_access_control_session_hijack",
+      "owasp": "A01: Broken Access Control (CWE-639 Authorization Bypass Through User-Controlled Key / missing session binding)",
+      "severity": "high",
+      "severity_note": "CVE-2025-52553: dropping the session_key constraint lets any party holding a connection-token value reuse it across sessions; RAC tokens grant interactive remote desktop/SSH access. High, same mapping as the standalone RAC suite.",
+      "security_relevant": true,
+      "difficulty": "hard",
+      "provenance": "real-regression",
+      "cve": "CVE-2025-52553",
+      "fixed_by": "https://github.com/goauthentik/authentik (CVE-2025-52553 RAC session-hijack fix; this suite reverses the session_key binding on the ConnectionToken lookup)",
+      "description": "The REAL bug. RACInterface.dispatch looks up the ConnectionToken by token value AND session binding (session__session__session_key=request.session.session_key). This regression removes the session_key constraint, so the token is matched by value alone, any session presenting a known/leaked token value is accepted, a session hijack into remote desktop/SSH access (CVE-2025-52553). The catch must name the removed session binding / session_key constraint and the cross-session token reuse (session hijack). It is bundled with a benign distractor change so the diff reads as routine cleanup; a reviewer that waves the whole bundle through misses this.",
+      "detection_hints": {
+        "must_mention_any": [
+          "session_key",
+          "session key",
+          "session binding",
+          "session__session",
+          "session hijack",
+          "hijack",
+          "session ownership",
+          "session-scoped",
+          "session-based",
+          "session validation",
+          "session scope",
+          "session isolation",
+          "cross-session",
+          "token reuse",
+          "token hijack",
+          "reused",
+          "reuse",
+          "stolen token",
+          "leaked token",
+          "ConnectionToken",
+          "any session",
+          "any user",
+          "another user",
+          "impersonation",
+          "tenant isolation",
+          "ownership check",
+          "bound to",
+          "not bound",
+          "CWE-639",
+          "authorization bypass",
+          "access control"
+        ]
+      },
+      "injection": {
+        "find": "        token = ConnectionToken.objects.filter(\n            token=self.kwargs[\"token\"],\n            session__session__session_key=request.session.session_key,\n        ).first()",
+        "replace_with": "        token = ConnectionToken.objects.filter(\n            token=self.kwargs[\"token\"],\n        ).first()"
+      }
+    }
+  ],
+  "distractors": [
+    {
+      "id": "DISTRACTOR_001",
+      "file": "views.py",
+      "label": "removed cosmetic 'already connected in another tab' message",
+      "why_benign": "The removed block only appends an informational message ('(You are already connected in another tab/window)') to the rejection text when the connection limit is hit. The connection is STILL rejected via stage_invalid either way; no access decision, security check, or control-flow outcome changes. Removing it is a purely cosmetic UX simplification, so a reviewer flagging it is being cautious, not correct, and is not penalized.",
+      "match_keywords": [
+        "already connected",
+        "another tab",
+        "tab/window",
+        "already being connected",
+        "connection limit",
+        "maximum connection",
+        "duplicate connection",
+        "reconnection",
+        "reconnect",
+        "existing user connections",
+        "existing connections",
+        "user notification",
+        "user feedback",
+        "informational",
+        "informative message",
+        "notice",
+        "friendly message",
+        "ux",
+        "user experience",
+        "feedback specificity",
+        "user-facing message",
+        "cosmetic",
+        "msg.append",
+        "inform the user",
+        "notify the user",
+        "descriptive",
+        "hint",
+        "user-friendly message"
+      ],
+      "injection": {
+        "find": "                msg = [_(\"Maximum connection limit reached.\")]\n                # Check if any other tokens exist for the current user, and inform them\n                # they are already connected\n                if all_tokens.filter(session__user=self.request.user).exists():\n                    msg.append(_(\"(You are already connected in another tab/window)\"))\n                return self.executor.stage_invalid(\" \".join(msg))",
+        "replace_with": "                msg = [_(\"Maximum connection limit reached.\")]\n                return self.executor.stage_invalid(\" \".join(msg))"
+      }
+    }
+  ]
+}

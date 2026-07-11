@@ -1,0 +1,120 @@
+{
+  "benchmark_name": "Django Real Regressions",
+  "version": 1,
+  "repo": "https://github.com/django/django",
+  "base_branch": "main",
+  "buggy_branch": "benchmark/real-regression",
+  "created_at": "2026-06-24",
+  "tech_stack": "Python / Django",
+  "provenance": "real-regression",
+  "note": "Each bug is the exact reverse of a real, merged Django fix, the regression that actually shipped before maintainers patched it. BUG_003 reverses a fix for an assigned CVE. No synthetic bugs; every bug links its upstream fix commit.",
+  "file_locations": {
+    "lookups.py": "django/db/models/lookups.py",
+    "storage.py": "django/contrib/staticfiles/storage.py",
+    "filebased.py": "django/core/cache/backends/filebased.py",
+    "fields.py": "django/forms/fields.py"
+  },
+  "scoring": {
+    "detect_points": 10,
+    "correct_file_bonus": 3,
+    "correct_severity_bonus": 2,
+    "false_positive_penalty": -2,
+    "severity_weight": { "high": 1.5, "medium": 1.0, "low": 0.5 }
+  },
+  "bugs": [
+    {
+      "id": "BUG_001",
+      "file": "filebased.py",
+      "function": "FileBasedCache._createdir",
+      "category": "incorrect_permissions",
+      "owasp": "A01: Broken Access Control",
+      "severity": "low",
+      "severity_note": "Recalibrated high->low to match the official NVD rating (low) for CVE-2026-25674 (umask race, overly-permissive permissions in multi-threaded apps). The provenance (a real, assigned CVE) is the point, not an inflated severity.",
+      "security_relevant": true,
+      "difficulty": "hard",
+      "provenance": "real-regression",
+      "cve": "CVE-2026-25674",
+      "fixed_by": "https://github.com/django/django/commit/019e44f67a (CVE-2026-25674)",
+      "description": "Reverts the fix for CVE-2026-25674. The cache-directory creation goes back to mutating the PROCESS-GLOBAL umask (`os.umask(0o077)`) around `os.makedirs(..., 0o700)` instead of the thread-safe `safe_makedirs` helper. Because umask is process-wide and not thread-safe, a concurrent thread creating files/directories during that window can land with incorrect (too-permissive) permissions, and intermediate directories may not get the intended mode. A real, assigned CVE about incorrect filesystem permissions, reintroduced.",
+      "detection_hints": {
+        "must_mention_any": [
+          "umask", "os.umask", "makedirs", "permission", "thread-safe", "thread safe",
+          "race", "global", "intermediate", "0o700"
+        ]
+      },
+      "injection": {
+        "find": "    def _createdir(self):\n        # Workaround because os.makedirs() doesn't apply the \"mode\" argument\n        # to intermediate-level directories.\n        # https://github.com/python/cpython/issues/86533\n        safe_makedirs(self._dir, mode=0o700, exist_ok=True)",
+        "replace_with": "    def _createdir(self):\n        # Set the umask because os.makedirs() doesn't apply the \"mode\" argument\n        # to intermediate-level directories.\n        old_umask = os.umask(0o077)\n        try:\n            os.makedirs(self._dir, 0o700, exist_ok=True)\n        finally:\n            os.umask(old_umask)"
+      }
+    },
+    {
+      "id": "BUG_002",
+      "file": "lookups.py",
+      "function": "In.process_rhs",
+      "category": "incorrect_query",
+      "owasp": "Not applicable (correctness)",
+      "severity": "medium",
+      "security_relevant": false,
+      "difficulty": "medium",
+      "provenance": "real-regression",
+      "fixed_by": "https://github.com/django/django/commit/5776a1660e (#31667)",
+      "description": "Reverts the fix that strips None from an `__in` lookup's right-hand side. Because SQL NULL is never equal to anything, a value of None inside `field__in=[...]` can never match a row, but leaving it in produces a confusing/incorrect IN clause (and historically caused wrong results). The real fix added `rhs.discard(None)` (and the non-hashable fallback `[r for r in self.rhs if r is not None]`). Reverting drops both, so None values leak back into IN clauses.",
+      "detection_hints": {
+        "must_mention_any": [
+          "None", "__in", "IN lookup", "discard", "NULL", "is not None",
+          "OrderedSet", "rhs", "never equal", "filter out"
+        ]
+      },
+      "injection": {
+        "find": "        if self.rhs_is_direct_value():\n            # Remove None from the list as NULL is never equal to anything.\n            try:\n                rhs = OrderedSet(self.rhs)\n                rhs.discard(None)\n            except TypeError:  # Unhashable items in self.rhs\n                rhs = [r for r in self.rhs if r is not None]",
+        "replace_with": "        if self.rhs_is_direct_value():\n            try:\n                rhs = OrderedSet(self.rhs)\n            except TypeError:  # Unhashable items in self.rhs\n                rhs = self.rhs"
+      }
+    },
+    {
+      "id": "BUG_003",
+      "file": "fields.py",
+      "function": "JSONField.bound_data",
+      "category": "crash",
+      "owasp": "Not applicable (correctness)",
+      "severity": "medium",
+      "security_relevant": false,
+      "difficulty": "medium",
+      "provenance": "real-regression",
+      "fixed_by": "https://github.com/django/django/commit/f5ea9aa2f3 (#32807)",
+      "description": "Reverts the None guard in `JSONField.bound_data`. When a form with a JSONField is redisplayed with a None value, the code falls straight into `json.loads(data, ...)`; `json.loads(None)` raises `TypeError`, which is NOT caught by the surrounding `except json.JSONDecodeError`, so redisplaying the form crashes. The real fix returned early on None. Reverting reintroduces the crash on None redisplay.",
+      "detection_hints": {
+        "must_mention_any": [
+          "None", "json.loads", "bound_data", "TypeError", "crash", "JSONDecodeError",
+          "redisplay", "guard", "JSONField", "return None"
+        ]
+      },
+      "injection": {
+        "find": "        if data is None:\n            return None\n        try:\n            return json.loads(data, cls=self.decoder)",
+        "replace_with": "        try:\n            return json.loads(data, cls=self.decoder)"
+      }
+    },
+    {
+      "id": "BUG_004",
+      "file": "storage.py",
+      "function": "HashedFilesMixin.hashed_name",
+      "category": "incorrect_string",
+      "owasp": "Not applicable (correctness)",
+      "severity": "medium",
+      "security_relevant": false,
+      "difficulty": "medium",
+      "provenance": "real-regression",
+      "fixed_by": "https://github.com/django/django/commit/67b334fbaf (#31517)",
+      "description": "Reverts the fix for a hashed static-file name when the file hash is None/empty. The fixed code uses `('.%s' % file_hash) if file_hash else ''`, falling back to an empty fragment. The reverted code only guards `is not None`, so when `file_hash` is None it stays None and the literal string 'None' is interpolated into the hashed filename (`...rootNoneext`), and an empty string produces a stray '.'. Reintroduces a real broken-filename regression.",
+      "detection_hints": {
+        "must_mention_any": [
+          "file_hash", "None", "hashed_name", "filename", "literal", "is not None",
+          "empty", "interpolat", "string", "static"
+        ]
+      },
+      "injection": {
+        "find": "        file_hash = (\".%s\" % file_hash) if file_hash else \"\"",
+        "replace_with": "        if file_hash is not None:\n            file_hash = \".%s\" % file_hash"
+      }
+    }
+  ]
+}

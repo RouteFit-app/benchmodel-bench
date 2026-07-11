@@ -1,0 +1,48 @@
+{
+  "benchmark_name": "LangChain Real Regressions",
+  "version": 1,
+  "repo": "https://github.com/langchain-ai/langchain",
+  "base_branch": "master",
+  "buggy_branch": "benchmark/real-regression",
+  "created_at": "2026-06-25",
+  "tech_stack": "AI Frameworks",
+  "provenance": "real-regression",
+  "note": "Reverses the fix for CVE-2026-34070 (HIGH), the path-traversal in langchain-core's legacy load_prompt loaders. The fix added _validate_path(), which rejects absolute paths and '..' components before opening a prompt/template file; this suite removes that guard from the primary template-loading path, so a user-influenced prompt config can read arbitrary host files. Diff-visible: the reviewer should see a path-traversal guard deleted immediately before .resolve()/.read_text().",
+  "file_locations": {
+    "loading.py": "libs/core/langchain_core/prompts/loading.py"
+  },
+  "scoring": {
+    "detect_points": 10,
+    "correct_file_bonus": 3,
+    "correct_severity_bonus": 2,
+    "false_positive_penalty": -2,
+    "severity_weight": { "high": 1.5, "medium": 1.0, "low": 0.5 }
+  },
+  "bugs": [
+    {
+      "id": "BUG_001",
+      "file": "loading.py",
+      "function": "_load_template",
+      "category": "path_traversal",
+      "owasp": "A01: Broken Access Control / A05: Security Misconfiguration (CWE-22)",
+      "severity": "high",
+      "severity_note": "Advisory rates CVE-2026-34070 HIGH (arbitrary host-file read via load_prompt); mapped to the board's 'high', not inflated.",
+      "security_relevant": true,
+      "difficulty": "easy",
+      "provenance": "real-regression",
+      "cve": "CVE-2026-34070",
+      "fixed_by": "https://github.com/langchain-ai/langchain commit 27add913474e01e33bededf4096151130ba0d47c (CVE-2026-34070 / GHSA-qh6h-p6c9-ff54, fixed in langchain-core 1.2.22)",
+      "description": "Reverts the fix for CVE-2026-34070. In _load_template, the `if not allow_dangerous_paths: _validate_path(template_path)` guard is deleted, so the path popped from a (potentially user-influenced) prompt config is passed straight to Path.resolve() and read_text() with no absolute-path or '..' traversal check. An application that calls load_prompt() / load_prompt_from_config() on attacker-controlled config can then read arbitrary files on the host (constrained only by the .txt suffix check), the classic directory-traversal arbitrary-file-read. The real fix added _validate_path(); reverting removes it from the template path. The reviewer must flag that deleting the traversal guard before a file open reintroduces a path-traversal / arbitrary-file-read vulnerability.",
+      "detection_hints": {
+        "must_mention_any": [
+          "path traversal", "directory traversal", "traversal", "_validate_path", "absolute path",
+          "..", "arbitrary file", "file read", "load_prompt", "validation", "sanitize", "CWE-22", "untrusted"
+        ]
+      },
+      "injection": {
+        "find": "        template_path = Path(config.pop(f\"{var_name}_path\"))\n        if not allow_dangerous_paths:\n            _validate_path(template_path)\n        # Resolve symlinks before checking the suffix so that a symlink named",
+        "replace_with": "        template_path = Path(config.pop(f\"{var_name}_path\"))\n        # Resolve symlinks before checking the suffix so that a symlink named"
+      }
+    }
+  ]
+}

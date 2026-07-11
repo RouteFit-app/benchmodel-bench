@@ -1,0 +1,49 @@
+{
+  "benchmark_name": "vLLM Real Regressions",
+  "version": 1,
+  "repo": "https://github.com/vllm-project/vllm",
+  "base_branch": "main",
+  "buggy_branch": "benchmark/real-regression",
+  "created_at": "2026-06-26",
+  "tech_stack": "AI Frameworks",
+  "provenance": "real-regression",
+  "note": "Reverses the fix for CVE-2025-62164 (High, CVSS 8.8), the prompt_embeds deserialization RCE in vLLM, the most-installed LLM inference server. The Completions API loads user-supplied tensors with torch.load(weights_only=True), which looks safe, but since PyTorch 2.8 disabled sparse-tensor integrity checks by default, a crafted sparse tensor bypasses bounds checks and triggers an out-of-bounds write in to_dense() (memory corruption -> DoS and potential RCE). The fix wrapped the load in `with torch.sparse.check_sparse_tensor_invariants():`. This suite removes that wrapper. Deliberately hard: weights_only=True stays, so it reads like the standard safe pattern; the catch is recognizing the removed sparse-invariant check reopens an OOB-write RCE on untrusted input.",
+  "file_locations": {
+    "embed_utils.py": "vllm/renderers/embed_utils.py"
+  },
+  "scoring": {
+    "detect_points": 10,
+    "correct_file_bonus": 3,
+    "correct_severity_bonus": 2,
+    "false_positive_penalty": -2,
+    "severity_weight": { "high": 1.5, "medium": 1.0, "low": 0.5 }
+  },
+  "bugs": [
+    {
+      "id": "BUG_001",
+      "file": "embed_utils.py",
+      "function": "safe_load_prompt_embeds",
+      "category": "deserialization_rce",
+      "owasp": "A08: Software and Data Integrity Failures (CWE-502 Deserialization of Untrusted Data / CWE-787 OOB write)",
+      "severity": "high",
+      "severity_note": "CVE-2025-62164 is rated High (CVSS 8.8): unauthenticated-to-low-priv network attacker, memory corruption to DoS and potential RCE. Mapped to the board's high, not inflated.",
+      "security_relevant": true,
+      "difficulty": "hard",
+      "provenance": "real-regression",
+      "cve": "CVE-2025-62164",
+      "fixed_by": "https://github.com/vllm-project/vllm/pull/27204 (CVE-2025-62164 / GHSA-mrw7-hf4f-83pf, fixed in vLLM 0.11.1)",
+      "description": "Reverts the fix for CVE-2025-62164. safe_load_prompt_embeds deserializes a user-supplied prompt-embeddings tensor from the Completions API with torch.load(..., weights_only=True) and then calls to_dense(). Since PyTorch 2.8 disabled sparse-tensor integrity checks by default, a maliciously crafted sparse tensor bypasses internal bounds checks and triggers an out-of-bounds write during to_dense(), corrupting memory in the vLLM server process (DoS and potential RCE). The fix wrapped the load + to_dense in `with torch.sparse.check_sparse_tensor_invariants():`, which re-enables those checks. The regression removes that context manager (and its explanatory comment) and de-indents the body, restoring the unchecked path. The trap: `weights_only=True` is still present, which is the canonical 'safe torch.load' signal, so the code reads as safe. The reviewer must recognize that for sparse tensors weights_only is not enough, and that stripping the sparse-invariant check on attacker-controlled input reopens an OOB-write / RCE. Flagging it as a generic 'torch.load on untrusted data' is on the right track; the precise catch names the removed sparse-tensor integrity check and the to_dense OOB write.",
+      "detection_hints": {
+        "must_mention_any": [
+          "sparse", "check_sparse_tensor_invariants", "torch.load", "deserialization", "to_dense",
+          "out-of-bounds", "OOB", "memory corruption", "RCE", "untrusted", "integrity check",
+          "invariant", "prompt_embeds", "weights_only", "CWE-502", "tensor"
+        ]
+      },
+      "injection": {
+        "find": "    # Enable sparse tensor integrity checks to prevent out-of-bounds\n    # writes from maliciously crafted tensors\n    with torch.sparse.check_sparse_tensor_invariants():\n        tensor = torch.load(\n            BytesIO(pybase64.b64decode(embed, validate=True)),\n            weights_only=True,\n            map_location=torch.device(\"cpu\"),\n        )\n        if not isinstance(tensor, torch.Tensor):\n            raise VLLMValidationError(\n                \"`prompt_embeds` payload did not deserialize to a torch.Tensor.\",\n                parameter=\"prompt_embeds\",\n            )\n        tensor = tensor.to_dense()",
+        "replace_with": "    tensor = torch.load(\n        BytesIO(pybase64.b64decode(embed, validate=True)),\n        weights_only=True,\n        map_location=torch.device(\"cpu\"),\n    )\n    if not isinstance(tensor, torch.Tensor):\n        raise VLLMValidationError(\n            \"`prompt_embeds` payload did not deserialize to a torch.Tensor.\",\n            parameter=\"prompt_embeds\",\n        )\n    tensor = tensor.to_dense()"
+      }
+    }
+  ]
+}

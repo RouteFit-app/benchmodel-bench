@@ -1,0 +1,9 @@
+diff --git a/media/thumb.go b/media/thumb.go
+--- a/media/thumb.go
++++ b/media/thumb.go
+@@ -10,7 +10,8 @@ func MakeThumbnail(srcPath, destPath string) error {
+-	cmd := exec.Command("sh", "-c", "convert "+srcPath+" -resize 200x200 "+destPath)
++	// pass args directly (no shell), so metacharacters aren't interpreted
++	cmd := exec.Command("convert", srcPath, "-resize", "200x200", destPath)
+ 	return cmd.Run()
+ }

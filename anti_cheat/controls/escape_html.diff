@@ -1,0 +1,9 @@
+diff --git a/app/views.py b/app/views.py
+--- a/app/views.py
++++ b/app/views.py
+@@ -10,7 +10,8 @@ from markupsafe import escape
+ def greeting(request):
+     name = request.args.get("name", "")
+-    return f"<h1>Hello {name}</h1>"
++    # escape untrusted input before placing it in HTML
++    return f"<h1>Hello {escape(name)}</h1>"

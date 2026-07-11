@@ -1,0 +1,71 @@
+{
+  "benchmark_name": "Parse Server Real Regressions",
+  "version": 1,
+  "repo": "https://github.com/parse-community/parse-server",
+  "base_branch": "alpha",
+  "buggy_branch": "benchmark/real-regression",
+  "created_at": "2026-06-28",
+  "tech_stack": "Node.js / Express",
+  "provenance": "real-regression",
+  "note": "Reverses the fix for GHSA-5fw2-8jcv-xh87 / CVE-2026-... (Critical, CVSS 9.8), an account-takeover via operator injection in Parse Server's authentication-data lookup. Parse Server (parse-community, 21k+ stars) is a widely deployed Express/Node backend-as-a-service. In Auth.js findUsersWithAuthData, each third-party provider's authData.id is used to build a query: { ['authData.<provider>.id']: providerAuthData.id }. The fix added a guard requiring providerAuthData.id to be a string; without it, an attacker can submit an OBJECT as the id (e.g. a query operator like {\"$regex\": \".*\"} or {\"$ne\": null}) which is injected straight into the query, matching another user's auth record and logging the attacker in as that user (account takeover). This suite removes that 4-line type-check guard. Diff-visible: the reviewer sees a value that flows into a database query lose its 'must be a string' validation, while the surrounding code still treats it as a trusted id.",
+  "file_locations": {
+    "Auth.js": "src/Auth.js"
+  },
+  "scoring": {
+    "detect_points": 10,
+    "correct_file_bonus": 3,
+    "correct_severity_bonus": 2,
+    "false_positive_penalty": -2,
+    "severity_weight": {
+      "high": 1.5,
+      "medium": 1.0,
+      "low": 0.5
+    }
+  },
+  "bugs": [
+    {
+      "id": "BUG_001",
+      "file": "Auth.js",
+      "function": "findUsersWithAuthData",
+      "category": "operator_injection_account_takeover",
+      "owasp": "A01: Broken Access Control / A03: Injection (NoSQL operator injection -> authentication bypass / account takeover)",
+      "severity": "high",
+      "severity_note": "GHSA-5fw2-8jcv-xh87 is rated Critical (CVSS 9.8): unauthenticated account takeover via operator injection in the auth-data identifier. Mapped to the board's high, its top tier, not inflated.",
+      "security_relevant": true,
+      "difficulty": "hard",
+      "provenance": "real-regression",
+      "cve": "GHSA-5fw2-8jcv-xh87 (account takeover via operator injection)",
+      "fixed_by": "https://github.com/parse-community/parse-server/commit/0d0a5543b35c35c12f69d5182693e50182b6faad (GHSA-5fw2-8jcv-xh87, PR #10185)",
+      "description": "Reverts the fix for GHSA-5fw2-8jcv-xh87. In findUsersWithAuthData (src/Auth.js), each provider's authData.id is interpolated into a query object: { ['authData.<provider>.id']: providerAuthData.id }. The fix added a guard that throws unless providerAuthData.id is a string. This regression removes that guard, so a client can pass an OBJECT as the id, e.g. {\"$ne\": null} or {\"$regex\": \"^\"} or {\"$gt\": \"\"}, which Parse/Mongo interprets as a query OPERATOR rather than a literal id. The injected operator matches another user's auth record (or any user), so the attacker authenticates as a victim, an unauthenticated account takeover. The catch: a reviewer must see that providerAuthData.id is placed into a database query without a type check, and that allowing a non-string (an object) enables NoSQL operator injection / auth bypass. Flagging a generic 'missing validation' is partial; the catch names operator/NoSQL injection or account-takeover/auth-bypass via a non-string id reaching the query.",
+      "detection_hints": {
+        "_note": "A catch must name the SECURITY IMPACT, operator/NoSQL injection or auth-bypass/account-takeover, not merely 'a type check was removed' (that's a diff restatement, which the methodology counts as partial, not a catch).",
+        "must_mention_any": [
+          "operator injection",
+          "nosql injection",
+          "nosql",
+          "operator",
+          "query operator",
+          "query operators",
+          "query object",
+          "$ne",
+          "$regex",
+          "$gt",
+          "$where",
+          "account takeover",
+          "auth bypass",
+          "authentication bypass",
+          "bypass auth",
+          "bypass authentication",
+          "bypass",
+          "impersonat",
+          "injection",
+          "login as"
+        ]
+      },
+      "injection": {
+        "find": "      if (typeof providerAuthData.id !== 'string') {\n        throw new Parse.Error(Parse.Error.INVALID_VALUE, `Invalid authData id for provider '${provider}'.`);\n      }\n\n      return { [`authData.${provider}.id`]: providerAuthData.id };",
+        "replace_with": "      return { [`authData.${provider}.id`]: providerAuthData.id };"
+      }
+    }
+  ]
+}

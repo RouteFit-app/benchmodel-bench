@@ -1,0 +1,49 @@
+{
+  "benchmark_name": "authentik RAC Regressions",
+  "version": 1,
+  "repo": "https://github.com/goauthentik/authentik",
+  "base_branch": "main",
+  "buggy_branch": "benchmark/real-regression-rac",
+  "created_at": "2026-06-25",
+  "tech_stack": "Python / Django",
+  "provenance": "real-regression",
+  "note": "Reverses the fix for CVE-2025-52553, the RAC (Remote Access Control) session-hijack in authentik. A connection token is meant to be valid only for the session of the user who authorized it; the fix scopes the token lookup to the requesting session (session__session__session_key=request.session.session_key). The regression removes that constraint, leaving a token-only lookup, so anyone who obtains the connection URL (e.g. shown during a screenshare) can take over the same remote session. Deliberately subtle: the diff shows a token query losing one filter line, and a token-by-token lookup reads like normal validation. The catch requires knowing the token must be bound to its session, not just exist.",
+  "file_locations": {
+    "views.py": "authentik/providers/rac/views.py"
+  },
+  "scoring": {
+    "detect_points": 10,
+    "correct_file_bonus": 3,
+    "correct_severity_bonus": 2,
+    "false_positive_penalty": -2,
+    "severity_weight": { "high": 1.5, "medium": 1.0, "low": 0.5 }
+  },
+  "bugs": [
+    {
+      "id": "BUG_001",
+      "file": "views.py",
+      "function": "RACInterface.dispatch",
+      "category": "broken_access_control_session_hijack",
+      "owasp": "A01: Broken Access Control (CWE-639 Authorization Bypass Through User-Controlled Key / missing session binding)",
+      "severity": "high",
+      "severity_note": "CVE-2025-52553 is a session-hijack on RAC connections: dropping the session_key constraint lets any party holding a connection-token value reuse it across sessions, and RAC tokens grant interactive remote desktop/SSH access to a host. Mapped to the board's high, the access granted and the unauthorized-takeover impact put it in the top tier; the token-URL precondition lowers likelihood but not the severity of a successful hijack. A reviewer rating it medium under-triages the impact.",
+      "security_relevant": true,
+      "difficulty": "hard",
+      "provenance": "real-regression",
+      "cve": "CVE-2025-52553",
+      "fixed_by": "https://github.com/goauthentik/authentik/commit/7100d3c6741853f1cfe3ea2073ba01823ab55caa (CVE-2025-52553, PR #15289, fixed in authentik 2025.4.3 / 2025.6.3)",
+      "description": "Reverts the fix for CVE-2025-52553. RACInterface.dispatch looks up the RAC connection token; the fix constrains that lookup to the requesting user's session by adding `session__session__session_key=request.session.session_key` to the filter. The regression removes that line, leaving `ConnectionToken.objects.filter(token=self.kwargs[\"token\"]).first()`, a lookup keyed only on the token value. Because the token travels in the connection URL and is no longer bound to the session that authorized it, anyone who obtains the URL (for instance, a viewer of a screenshare where the RAC window is visible) can present the same token and take over the remote session. The reviewer must recognize that filtering by the token alone is insufficient: a connection token has to be scoped to its owning session, or possession of the URL equals access. This reads like routine validation (it does filter by token), so the catch is conceptual: the missing session binding is an authorization bypass / session hijack, not a harmless query simplification. Flagging it as a generic 'missing filter' without naming the session-hijack / access-control impact is a partial catch.",
+      "detection_hints": {
+        "must_mention_any": [
+          "session", "session_key", "session binding", "bound to", "token", "hijack",
+          "ownership", "any user", "IDOR", "authorization", "access control", "scope",
+          "another user", "connection token", "URL", "session verification"
+        ]
+      },
+      "injection": {
+        "find": "        token = ConnectionToken.objects.filter(\n            token=self.kwargs[\"token\"],\n            session__session__session_key=request.session.session_key,\n        ).first()",
+        "replace_with": "        token = ConnectionToken.objects.filter(\n            token=self.kwargs[\"token\"],\n        ).first()"
+      }
+    }
+  ]
+}

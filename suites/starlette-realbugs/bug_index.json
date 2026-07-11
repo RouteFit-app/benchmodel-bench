@@ -1,0 +1,96 @@
+{
+  "benchmark_name": "Starlette Real Regressions",
+  "version": 1,
+  "repo": "https://github.com/Kludex/starlette",
+  "base_branch": "main",
+  "buggy_branch": "benchmark/real-regression",
+  "created_at": "2026-06-25",
+  "tech_stack": "AI Frameworks",
+  "provenance": "real-regression",
+  "note": "Each bug is the exact reverse of a real, merged Starlette security fix, the regression that actually shipped before maintainers patched it. Starlette is the ASGI foundation under FastAPI, so these are vulnerabilities in the framework people build AI services on. BUG_001 reverses CVE-2026-48710 (BadHost, May 2026); BUG_002 reverses CVE-2023-29159 (StaticFiles path traversal). No synthetic bugs; every bug links its upstream fix commit.",
+  "file_locations": {
+    "datastructures.py": "starlette/datastructures.py",
+    "staticfiles.py": "starlette/staticfiles.py"
+  },
+  "scoring": {
+    "detect_points": 10,
+    "correct_file_bonus": 3,
+    "correct_severity_bonus": 2,
+    "false_positive_penalty": -2,
+    "severity_weight": { "high": 1.5, "medium": 1.0, "low": 0.5 }
+  },
+  "bugs": [
+    {
+      "id": "BUG_001",
+      "file": "datastructures.py",
+      "function": "URL.__init__",
+      "category": "host_header_bypass",
+      "owasp": "A07: Identification and Authentication Failures",
+      "severity": "high",
+      "security_relevant": true,
+      "difficulty": "hard",
+      "provenance": "real-regression",
+      "cve": "CVE-2026-48710",
+      "fixed_by": "https://github.com/Kludex/starlette/commit/764dab0dcfb9033d75442d7a359645c9f94648c6 (#3279, CVE-2026-48710 'BadHost')",
+      "description": "Reverts the fix for CVE-2026-48710 (BadHost). When building request.url, Starlette interpolates the client-supplied Host header into the URL string directly, without validating it against the host grammar. A malformed Host header containing path-affecting characters (/, ?, #, @) makes urlsplit produce a request.url.path that differs from scope['path'], so path-based security checks (auth, routing, middleware) inspect the wrong path, an authentication/authorization bypass and request-smuggling vector affecting Starlette and every FastAPI app on top of it. The real fix added `and _HOST_RE.fullmatch(host_header)` so a malformed Host is ignored and the URL falls back to safe components. Reverting drops that check, the raw Host header is trusted again.",
+      "detection_hints": {
+        "must_mention_any": [
+          "Host header", "request.url", "_HOST_RE", "validation", "host_header",
+          "fullmatch", "url.path", "auth bypass", "path-based", "smuggling", "malformed", "BadHost"
+        ]
+      },
+      "injection": {
+        "find": "            if host_header is not None and _HOST_RE.fullmatch(host_header):",
+        "replace_with": "            if host_header is not None:"
+      }
+    },
+    {
+      "id": "BUG_002",
+      "file": "staticfiles.py",
+      "function": "StaticFiles.lookup_path",
+      "category": "path_traversal",
+      "owasp": "A01: Broken Access Control",
+      "severity": "medium",
+      "severity_note": "Reverses CVE-2023-29159 (StaticFiles path traversal). Verify the official CVSS before headlining a severity; weighted medium here pending that check.",
+      "security_relevant": true,
+      "difficulty": "hard",
+      "provenance": "real-regression",
+      "cve": "CVE-2023-29159",
+      "fixed_by": "https://github.com/Kludex/starlette/commit/1797de4 (GHSA-v5gw-mw7f-84px, CVE-2023-29159)",
+      "description": "Reverts the fix for CVE-2023-29159. The directory-containment check uses os.path.commonprefix instead of os.path.commonpath. commonprefix compares character by character, not as paths, so a request for a sibling directory that shares a name prefix (e.g. served '/static', requested path resolving to '/static-secret/...') passes the check and escapes the served directory, a path traversal that leaks files outside the static root. The real fix replaced commonprefix with commonpath, which compares path components. Reverting reintroduces the character-prefix bug.",
+      "detection_hints": {
+        "must_mention_any": [
+          "commonprefix", "commonpath", "path traversal", "directory traversal", "lookup_path",
+          "StaticFiles", "escape", "static", "prefix", "os.path", "sibling"
+        ]
+      },
+      "injection": {
+        "find": "            if os.path.commonpath([full_path, directory]) != str(directory):",
+        "replace_with": "            if os.path.commonprefix([full_path, directory]) != str(directory):"
+      }
+    },
+    {
+      "id": "BUG_003",
+      "file": "staticfiles.py",
+      "function": "StaticFiles.lookup_path",
+      "category": "path_traversal",
+      "owasp": "A01: Broken Access Control",
+      "severity": "medium",
+      "security_relevant": true,
+      "difficulty": "medium",
+      "provenance": "real-regression",
+      "fixed_by": "https://github.com/Kludex/starlette/commit/fd53168a7767b6b55ba5af787fd88f49e33cabc5 (#3287)",
+      "description": "Reverts the fix that rejects absolute paths in StaticFiles.lookup_path. Without the guard, a request whose resolved path is absolute (starting with '/' or '\\\\') is passed straight to os.path.join, where an absolute second argument discards the served directory entirely (os.path.join('/srv/static', '/etc/passwd') == '/etc/passwd'), letting a client read arbitrary files outside the static root. The real fix added an early `if path.startswith((\"/\", \"\\\\\")): return \"\", None`. Reverting removes that guard.",
+      "detection_hints": {
+        "must_mention_any": [
+          "absolute path", "startswith", "lookup_path", "escape", "served directory",
+          "path traversal", "StaticFiles", "os.path.join", "guard", "reject"
+        ]
+      },
+      "injection": {
+        "find": "    def lookup_path(self, path: str) -> tuple[str, os.stat_result | None]:\n        # Reject absolute paths so they cannot escape the served directory.\n        if path.startswith((\"/\", \"\\\\\")):\n            return \"\", None\n        for directory in self.all_directories:",
+        "replace_with": "    def lookup_path(self, path: str) -> tuple[str, os.stat_result | None]:\n        for directory in self.all_directories:"
+      }
+    }
+  ]
+}

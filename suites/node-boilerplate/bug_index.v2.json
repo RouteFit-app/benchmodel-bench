@@ -1,0 +1,204 @@
+{
+  "benchmark_name": "Node Security Config (boilerplate)",
+  "version": 2,
+  "repo": "https://github.com/hagopj13/node-express-boilerplate",
+  "base_branch": "master",
+  "buggy_branch": "benchmark/node-sec-v2",
+  "created_at": "2026-06-23",
+  "tech_stack": "Node.js / Express",
+  "file_locations": {
+    "app.js": "src/app.js",
+    "auth.js": "src/middlewares/auth.js",
+    "token.service.js": "src/services/token.service.js",
+    "config.js": "src/config/config.js",
+    "user.model.js": "src/models/user.model.js",
+    "auth.service.js": "src/services/auth.service.js"
+  },
+  "scoring": {
+    "detect_points": 10,
+    "correct_file_bonus": 3,
+    "correct_severity_bonus": 2,
+    "false_positive_penalty": -2,
+    "severity_weight": {
+      "high": 1.5,
+      "medium": 1.0,
+      "low": 0.5
+    }
+  },
+  "bugs": [
+    {
+      "id": "BUG_001",
+      "file": "auth.js",
+      "function": "verifyCallback",
+      "category": "broken_access_control",
+      "owasp": "A01: Broken Access Control",
+      "severity": "high",
+      "security_relevant": true,
+      "difficulty": "hard",
+      "description": "The self-access exception in the rights check was inverted: `req.params.userId !== user.id` became `=== user.id`. The intent was 'allow if you have the right OR the resource is your own'; flipping the operator makes the guard reject only when you lack rights AND it is your own record, which means a rights-less user is now allowed to act on OTHER users' records (the :userId that is not theirs) while being denied their own. A one-character flip that turns the ownership check into an IDOR on /users/:userId.",
+      "detection_hints": {
+        "must_mention_any": [
+          "req.params.userId",
+          "user.id",
+          "=== user.id",
+          "ownership",
+          "IDOR",
+          "self",
+          "access control",
+          "operator",
+          "verifyCallback",
+          "other users"
+        ]
+      },
+      "injection": {
+        "find": "    if (!hasRequiredRights && req.params.userId !== user.id) {",
+        "replace_with": "    if (!hasRequiredRights && req.params.userId === user.id) {"
+      }
+    },
+    {
+      "id": "BUG_002",
+      "file": "token.service.js",
+      "function": "verifyToken",
+      "category": "broken_authentication",
+      "owasp": "A02: Cryptographic Failures",
+      "severity": "medium",
+      "security_relevant": true,
+      "difficulty": "hard",
+      "description": "verifyToken now calls `jwt.decode(token)` instead of `jwt.verify(token, config.jwt.secret)`. decode parses the payload WITHOUT checking the signature, so a forged/tampered token is no longer rejected on cryptographic grounds. The subsequent Token.findOne DB lookup limits exploitation for DB-backed flows (refresh), but the signature check that should be the first line of defense is gone, and any code path that trusts the decoded payload before the lookup is fully exposed. Classic decode-vs-verify regression.",
+      "detection_hints": {
+        "must_mention_any": [
+          "jwt.decode",
+          "jwt.verify",
+          "signature",
+          "verify",
+          "not verified",
+          "decode",
+          "verifyToken",
+          "tampered",
+          "forge",
+          "secret"
+        ]
+      },
+      "injection": {
+        "find": "  const payload = jwt.verify(token, config.jwt.secret);",
+        "replace_with": "  const payload = jwt.decode(token);"
+      }
+    },
+    {
+      "id": "BUG_003",
+      "file": "config.js",
+      "function": "envVarsSchema",
+      "category": "broken_authentication",
+      "owasp": "A07: Identification and Authentication Failures",
+      "severity": "medium",
+      "security_relevant": true,
+      "difficulty": "hard",
+      "description": "The access-token lifetime default was changed from 30 minutes to 43200 (30 days). Access tokens are bearer credentials that, unlike refresh tokens, are not stored or revocable server-side, so a stolen access token now grants a month of access instead of half an hour. A single edited default quietly widens the compromise window by 1440x.",
+      "detection_hints": {
+        "must_mention_any": [
+          "JWT_ACCESS_EXPIRATION",
+          "43200",
+          "30 days",
+          "expiration",
+          "expiry",
+          "access token",
+          "lifetime",
+          "long-lived",
+          "revoke",
+          "default"
+        ]
+      },
+      "injection": {
+        "find": "    JWT_ACCESS_EXPIRATION_MINUTES: Joi.number().default(30).description('minutes after which access tokens expire'),",
+        "replace_with": "    JWT_ACCESS_EXPIRATION_MINUTES: Joi.number().default(43200).description('minutes after which access tokens expire'),"
+      }
+    },
+    {
+      "id": "BUG_004",
+      "file": "user.model.js",
+      "function": "pre-save hook",
+      "category": "cryptographic_failure",
+      "owasp": "A02: Cryptographic Failures",
+      "severity": "high",
+      "security_relevant": true,
+      "difficulty": "hard",
+      "description": "The pre-save password-hash trigger was changed from `user.isModified('password')` to `user.isModified('name')`. On initial registration every path is modified so the password still hashes, which hides the bug, but on any later password-only change (the reset-password flow calls updateUserById with just { password }) `name` is not modified, the hook is skipped, and the new password is written to the database in PLAINTEXT. A subtle trigger swap that silently disables hashing on exactly the update path.",
+      "detection_hints": {
+        "must_mention_any": [
+          "isModified",
+          "password",
+          "name",
+          "pre-save",
+          "pre('save')",
+          "hash",
+          "bcrypt",
+          "plaintext",
+          "reset",
+          "hook"
+        ]
+      },
+      "injection": {
+        "find": "  if (user.isModified('password')) {",
+        "replace_with": "  if (user.isModified('name')) {"
+      }
+    },
+    {
+      "id": "BUG_005",
+      "file": "auth.service.js",
+      "function": "loginUserWithEmailAndPassword",
+      "category": "broken_authentication",
+      "owasp": "A07: Identification and Authentication Failures",
+      "severity": "medium",
+      "security_relevant": true,
+      "difficulty": "hard",
+      "description": "The login check was split so an unknown email and a wrong password now return different responses: a missing user throws 404 'No user found with this email' while a bad password throws 401 'Incorrect email or password'. The original single generic 401 deliberately prevented account enumeration; distinguishing the two lets an attacker probe which emails have accounts. Username/account enumeration via differential auth responses.",
+      "detection_hints": {
+        "must_mention_any": [
+          "enumeration",
+          "user enumeration",
+          "account enumeration",
+          "404",
+          "different",
+          "generic error",
+          "Incorrect email or password",
+          "No user found",
+          "login",
+          "reveal"
+        ]
+      },
+      "injection": {
+        "find": "  const user = await userService.getUserByEmail(email);\n  if (!user || !(await user.isPasswordMatch(password))) {\n    throw new ApiError(httpStatus.UNAUTHORIZED, 'Incorrect email or password');\n  }\n  return user;",
+        "replace_with": "  const user = await userService.getUserByEmail(email);\n  if (!user) {\n    throw new ApiError(httpStatus.NOT_FOUND, 'No user found with this email');\n  }\n  if (!(await user.isPasswordMatch(password))) {\n    throw new ApiError(httpStatus.UNAUTHORIZED, 'Incorrect email or password');\n  }\n  return user;"
+      }
+    },
+    {
+      "id": "BUG_006",
+      "file": "app.js",
+      "function": "cors middleware",
+      "category": "security_misconfiguration",
+      "owasp": "A05: Security Misconfiguration",
+      "severity": "medium",
+      "security_relevant": true,
+      "difficulty": "hard",
+      "description": "CORS was changed from `cors()` to `cors({ origin: true, credentials: true })`. `origin: true` reflects whatever Origin the request sends (so the response Access-Control-Allow-Origin echoes any site), and combined with `credentials: true` the browser will send and accept cookies/Authorization on those cross-origin requests. That reflect-any-origin-with-credentials combination defeats the same-origin protection and enables cross-site credentialed requests. It reads like a deliberate, correct CORS setup, which is what makes it dangerous.",
+      "detection_hints": {
+        "must_mention_any": [
+          "cors",
+          "origin: true",
+          "credentials: true",
+          "credentials",
+          "reflect",
+          "any origin",
+          "cross-origin",
+          "CSRF",
+          "Access-Control-Allow-Origin",
+          "misconfiguration"
+        ]
+      },
+      "injection": {
+        "find": "app.use(cors());\napp.options('*', cors());",
+        "replace_with": "app.use(cors({ origin: true, credentials: true }));\napp.options('*', cors({ origin: true, credentials: true }));"
+      }
+    }
+  ]
+}

@@ -1,0 +1,204 @@
+{
+  "benchmark_name": "Spring PetClinic Hard Mode",
+  "version": 1,
+  "repo": "https://github.com/spring-projects/spring-petclinic",
+  "base_branch": "main",
+  "buggy_branch": "benchmark/hardmode",
+  "created_at": "2026-06-23",
+  "tech_stack": "Java / Spring Boot",
+  "file_locations": {
+    "PetController.java": "src/main/java/org/springframework/samples/petclinic/owner/PetController.java",
+    "OwnerController.java": "src/main/java/org/springframework/samples/petclinic/owner/OwnerController.java",
+    "Owner.java": "src/main/java/org/springframework/samples/petclinic/owner/Owner.java",
+    "Pet.java": "src/main/java/org/springframework/samples/petclinic/owner/Pet.java",
+    "PetValidator.java": "src/main/java/org/springframework/samples/petclinic/owner/PetValidator.java",
+    "VisitController.java": "src/main/java/org/springframework/samples/petclinic/owner/VisitController.java"
+  },
+  "scoring": {
+    "detect_points": 10,
+    "correct_file_bonus": 3,
+    "correct_severity_bonus": 2,
+    "false_positive_penalty": -2,
+    "severity_weight": {
+      "high": 1.5,
+      "medium": 1.0,
+      "low": 0.5
+    }
+  },
+  "bugs": [
+    {
+      "id": "BUG_001",
+      "file": "PetController.java",
+      "function": "initPetBinder",
+      "category": "mass_assignment",
+      "owasp": "A08: Software and Data Integrity Failures",
+      "severity": "high",
+      "security_relevant": true,
+      "difficulty": "hard",
+      "description": "The pet form binder's disallowed-fields list lost its nested `\"*.id\"` entry, keeping only `\"id\"`. `setDisallowedFields(\"id\", \"*.id\")` blocks binding of both the top-level id AND any nested object id (e.g. `type.id`, `owner.id`); dropping `\"*.id\"` means a crafted form can now set nested identifiers. An attacker can rebind `type.id` (or other nested ids) to point a pet at an arbitrary referenced row, a mass-assignment / object-reference tampering vector. It reads as a harmless simplification of the disallowed list, which is what makes it dangerous, and it requires knowing that Spring data binding treats `\"id\"` and `\"*.id\"` as different scopes.",
+      "detection_hints": {
+        "must_mention_any": [
+          "setDisallowedFields",
+          "*.id",
+          "nested",
+          "mass assignment",
+          "data binding",
+          "binder",
+          "type.id",
+          "WebDataBinder",
+          "tampering",
+          "id"
+        ]
+      },
+      "injection": {
+        "find": "\t\tdataBinder.setValidator(new PetValidator());\n\t\tdataBinder.setDisallowedFields(\"id\", \"*.id\");",
+        "replace_with": "\t\tdataBinder.setValidator(new PetValidator());\n\t\tdataBinder.setDisallowedFields(\"id\");"
+      }
+    },
+    {
+      "id": "BUG_002",
+      "file": "OwnerController.java",
+      "function": "setAllowedFields",
+      "category": "mass_assignment",
+      "owasp": "A01: Broken Access Control",
+      "severity": "high",
+      "security_relevant": true,
+      "difficulty": "hard",
+      "description": "The owner form binder no longer disallows the top-level `\"id\"` field (it now lists only `\"*.id\"`). With `id` bindable, the create flow (`processCreationForm`, which has no id-mismatch guard, unlike the update flow) will accept an attacker-supplied owner id and `owners.save(owner)` it, overwriting whatever existing owner row already has that primary key. Object-reference tampering / record overwrite via mass assignment. Subtle because the binder still disallows nested `\"*.id\"`, so it looks like it is still protecting ids.",
+      "detection_hints": {
+        "must_mention_any": [
+          "setDisallowedFields",
+          "\"id\"",
+          "top-level id",
+          "mass assignment",
+          "overwrite",
+          "binder",
+          "data binding",
+          "primary key",
+          "create",
+          "tampering"
+        ]
+      },
+      "injection": {
+        "find": "\tpublic void setAllowedFields(WebDataBinder dataBinder) {\n\t\tdataBinder.setDisallowedFields(\"id\", \"*.id\");\n\t}",
+        "replace_with": "\tpublic void setAllowedFields(WebDataBinder dataBinder) {\n\t\tdataBinder.setDisallowedFields(\"*.id\");\n\t}"
+      }
+    },
+    {
+      "id": "BUG_003",
+      "file": "Owner.java",
+      "function": "pets association",
+      "category": "data_loss",
+      "owasp": "Not applicable (correctness)",
+      "severity": "high",
+      "security_relevant": false,
+      "difficulty": "hard",
+      "description": "The `pets` association cascade was narrowed from `CascadeType.ALL` to `CascadeType.PERSIST`. Spring Data's `save()` on an existing (non-new) owner performs a JPA `merge`, and merge only cascades to children whose association includes `CascadeType.MERGE` (ALL contains it; PERSIST does not). After this change, edits made through `PetController.updatePetDetails` (which mutates the managed pet then calls `owners.save(owner)`) and newly added pets are no longer cascaded on merge, so pet changes silently fail to persist. A one-token enum change that causes silent data loss and is only visible if you know JPA merge-cascade semantics.",
+      "detection_hints": {
+        "must_mention_any": [
+          "CascadeType",
+          "cascade",
+          "merge",
+          "PERSIST",
+          "ALL",
+          "not persisted",
+          "data loss",
+          "JPA",
+          "save",
+          "silently"
+        ]
+      },
+      "injection": {
+        "find": "\t@OneToMany(cascade = CascadeType.ALL, fetch = FetchType.EAGER)\n\t@JoinColumn(name = \"owner_id\")\n\t@OrderBy(\"name\")",
+        "replace_with": "\t@OneToMany(cascade = CascadeType.PERSIST, fetch = FetchType.EAGER)\n\t@JoinColumn(name = \"owner_id\")\n\t@OrderBy(\"name\")"
+      }
+    },
+    {
+      "id": "BUG_004",
+      "file": "Pet.java",
+      "function": "type association",
+      "category": "data_integrity",
+      "owasp": "Not applicable (correctness)",
+      "severity": "medium",
+      "security_relevant": false,
+      "difficulty": "hard",
+      "description": "A `cascade = CascadeType.ALL` was added to the `@ManyToOne` `type` association. PetType is shared reference/lookup data (many pets point at the same row). Cascading ALL from the many-side to a shared parent means persisting or removing a Pet can now cascade-merge or cascade-remove the shared PetType, corrupting or deleting a lookup row that other pets still reference. Cascading from a @ManyToOne to shared reference data is a classic JPA anti-pattern; the change looks like a reasonable annotation tweak but risks cross-record data corruption.",
+      "detection_hints": {
+        "must_mention_any": [
+          "CascadeType",
+          "cascade",
+          "ManyToOne",
+          "PetType",
+          "shared",
+          "reference data",
+          "lookup",
+          "remove",
+          "corruption",
+          "anti-pattern"
+        ]
+      },
+      "injection": {
+        "find": "\t@ManyToOne\n\t@JoinColumn(name = \"type_id\")\n\tprivate PetType type;",
+        "replace_with": "\t@ManyToOne(cascade = CascadeType.ALL)\n\t@JoinColumn(name = \"type_id\")\n\tprivate PetType type;"
+      }
+    },
+    {
+      "id": "BUG_005",
+      "file": "PetValidator.java",
+      "function": "validate",
+      "category": "validation_gap",
+      "owasp": "Not applicable (correctness)",
+      "severity": "medium",
+      "security_relevant": true,
+      "difficulty": "hard",
+      "description": "The required-birthDate check was gated behind `pet.isNew()`, so birthDate is now only required when creating a pet, not when editing one. The change mirrors the `pet.isNew() && pet.getType() == null` style of the type check two lines above, which makes it look deliberate and consistent. The effect: an edit can clear a pet's birthDate (submit it blank) and validation passes, allowing a required field to be nulled out on the update path. A data-integrity validation gap that hides behind a plausible-looking guard.",
+      "detection_hints": {
+        "must_mention_any": [
+          "birthDate",
+          "isNew",
+          "validation",
+          "required",
+          "update",
+          "edit",
+          "blank",
+          "null",
+          "gap",
+          "rejectValue"
+        ]
+      },
+      "injection": {
+        "find": "\t\t// birth date validation\n\t\tif (pet.getBirthDate() == null) {",
+        "replace_with": "\t\t// birth date validation\n\t\tif (pet.isNew() && pet.getBirthDate() == null) {"
+      }
+    },
+    {
+      "id": "BUG_006",
+      "file": "VisitController.java",
+      "function": "processNewVisitForm",
+      "category": "boundary_condition",
+      "owasp": "Not applicable (correctness)",
+      "severity": "medium",
+      "security_relevant": false,
+      "difficulty": "hard",
+      "description": "The visit-date validation was changed from `!visit.getDate().isAfter(LocalDate.now())` to `visit.getDate().isBefore(LocalDate.now())`. The two differ exactly at the boundary `date == today`: the original rejected today (a visit must be strictly in the future, consistent with `minVisitDate = now().plusDays(1)`), the new code accepts today. An off-by-one boundary bug that lets a visit be booked for the current day in violation of the form's own future-only contract, and the two expressions look equivalent at a glance.",
+      "detection_hints": {
+        "must_mention_any": [
+          "isAfter",
+          "isBefore",
+          "boundary",
+          "today",
+          "off-by-one",
+          "visit date",
+          "future",
+          "minVisitDate",
+          "LocalDate.now",
+          "equal"
+        ]
+      },
+      "injection": {
+        "find": "\t\tif (visit.getDate() != null && !visit.getDate().isAfter(LocalDate.now())) {",
+        "replace_with": "\t\tif (visit.getDate() != null && visit.getDate().isBefore(LocalDate.now())) {"
+      }
+    }
+  ]
+}

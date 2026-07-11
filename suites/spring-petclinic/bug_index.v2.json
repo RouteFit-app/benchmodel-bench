@@ -1,0 +1,211 @@
+{
+  "benchmark_name": "Spring PetClinic Bug Injection",
+  "version": 2,
+  "repo": "https://github.com/RouteFit-app/spring-petclinic",
+  "base_branch": "main",
+  "buggy_branch": "benchmark/buggy-v2",
+  "created_at": "2026-06-19",
+  "tech_stack": "Java / Spring Boot",
+  "_v2_note": "v1 saturated detection (all 7/7). v2 swaps line-local sign-flips for framework-semantic and cross-file bugs: JPA cascade/identity, lazy-init NPE across files, constraint/column mismatch, boolean short-circuit in a shared method, cross-cutting validation. A reviewer must understand Spring/JPA semantics and trace usage, not just read one line.",
+  "file_locations": {
+    "BaseEntity.java": "src/main/java/org/springframework/samples/petclinic/model/BaseEntity.java",
+    "NamedEntity.java": "src/main/java/org/springframework/samples/petclinic/model/NamedEntity.java",
+    "Person.java": "src/main/java/org/springframework/samples/petclinic/model/Person.java",
+    "Owner.java": "src/main/java/org/springframework/samples/petclinic/owner/Owner.java",
+    "Visit.java": "src/main/java/org/springframework/samples/petclinic/owner/Visit.java",
+    "Vets.java": "src/main/java/org/springframework/samples/petclinic/vet/Vets.java"
+  },
+  "scoring": {
+    "detect_points": 10,
+    "correct_file_bonus": 3,
+    "correct_severity_bonus": 2,
+    "false_positive_penalty": -2,
+    "severity_weight": {
+      "high": 1.5,
+      "medium": 1.0,
+      "low": 0.5
+    }
+  },
+  "bugs": [
+    {
+      "id": "BUG_001",
+      "file": "BaseEntity.java",
+      "function": "isNew",
+      "category": "framework_semantics",
+      "severity": "high",
+      "difficulty": "hard",
+      "security_relevant": false,
+      "description": "BaseEntity.isNew() is inverted: `return this.id == null` becomes `return this.id != null`. Every entity (Owner, Pet, Visit) inherits this, and isNew() drives JPA persist-vs-merge and the addPet/getPet logic. The one-line change has app-wide blast radius; a reviewer must know what isNew() means and trace where it's used.",
+      "injection": {
+        "find": "\t\treturn this.id == null;",
+        "replace_with": "\t\treturn this.id != null;"
+      },
+      "detection_hints": {
+        "must_mention_any": [
+          "isNew",
+          "id",
+          "null",
+          "== null",
+          "!= null",
+          "new entity",
+          "persist",
+          "inverted"
+        ]
+      }
+    },
+    {
+      "id": "BUG_002",
+      "file": "Owner.java",
+      "function": "pets association",
+      "category": "jpa_cascade",
+      "severity": "high",
+      "difficulty": "hard",
+      "security_relevant": false,
+      "description": "The pets @OneToMany cascade is narrowed from CascadeType.ALL to CascadeType.PERSIST. New pets still save, but UPDATE and REMOVE no longer cascade when the owner is saved, so edits to a pet are silently lost. Requires understanding JPA cascade semantics, not a visible logic error.",
+      "injection": {
+        "find": "\t@OneToMany(cascade = CascadeType.ALL, fetch = FetchType.EAGER)\n\t@JoinColumn(name = \"owner_id\")",
+        "replace_with": "\t@OneToMany(cascade = CascadeType.PERSIST, fetch = FetchType.EAGER)\n\t@JoinColumn(name = \"owner_id\")"
+      },
+      "detection_hints": {
+        "must_mention_any": [
+          "CascadeType",
+          "cascade",
+          "OneToMany",
+          "PERSIST",
+          "ALL",
+          "pets",
+          "merge",
+          "update"
+        ]
+      }
+    },
+    {
+      "id": "BUG_003",
+      "file": "Vets.java",
+      "function": "getVetList",
+      "category": "null_safety",
+      "severity": "medium",
+      "difficulty": "hard",
+      "security_relevant": false,
+      "description": "The lazy-init null guard is removed from Vets.getVetList(), so it can return null. VetController.showResourcesVetList() then calls `vets.getVetList().addAll(...)` on a fresh Vets, throwing a NullPointerException on the /vets endpoint. The bug only manifests by tracing the caller in another file.",
+      "injection": {
+        "find": "\t\tif (vets == null) {\n\t\t\tvets = new ArrayList<>();\n\t\t}\n",
+        "replace_with": ""
+      },
+      "detection_hints": {
+        "must_mention_any": [
+          "getVetList",
+          "null",
+          "ArrayList",
+          "NullPointer",
+          "NPE",
+          "lazy",
+          "vets"
+        ]
+      }
+    },
+    {
+      "id": "BUG_004",
+      "file": "Person.java",
+      "function": "firstName field",
+      "category": "constraint_mismatch",
+      "severity": "medium",
+      "difficulty": "hard",
+      "security_relevant": false,
+      "description": "The @Size(max = 30) constraint is removed from Person.firstName while @Column(length = 30) stays. A 31+ character first name now passes bean validation but overflows the DB column, causing a truncation/persistence error at write time instead of a clean validation message.",
+      "injection": {
+        "find": "\t@Column(length = 30)\n\t@Size(max = 30)\n\t@NotBlank\n\tprivate String firstName;",
+        "replace_with": "\t@Column(length = 30)\n\t@NotBlank\n\tprivate String firstName;"
+      },
+      "detection_hints": {
+        "must_mention_any": [
+          "@Size",
+          "Size",
+          "max",
+          "30",
+          "firstName",
+          "column length",
+          "validation",
+          "truncat"
+        ]
+      }
+    },
+    {
+      "id": "BUG_005",
+      "file": "Visit.java",
+      "function": "Visit constructor",
+      "category": "temporal_default",
+      "severity": "medium",
+      "difficulty": "medium",
+      "security_relevant": false,
+      "description": "The Visit() constructor default date flips from LocalDate.now().plusDays(1) to minusDays(1), so a new visit pre-fills with yesterday instead of tomorrow — quietly undermining the 'visits are in the future' assumption the form and validation rely on.",
+      "injection": {
+        "find": "\t\tthis.date = LocalDate.now().plusDays(1);",
+        "replace_with": "\t\tthis.date = LocalDate.now().minusDays(1);"
+      },
+      "detection_hints": {
+        "must_mention_any": [
+          "Visit",
+          "constructor",
+          "date",
+          "plusDays",
+          "minusDays",
+          "LocalDate.now",
+          "default",
+          "tomorrow"
+        ]
+      }
+    },
+    {
+      "id": "BUG_006",
+      "file": "Owner.java",
+      "function": "getPet(String,boolean)",
+      "category": "boolean_logic",
+      "severity": "medium",
+      "difficulty": "hard",
+      "security_relevant": false,
+      "description": "In getPet(name, ignoreNew) the guard `!ignoreNew || !pet.isNew()` becomes `!ignoreNew && !pet.isNew()`. When ignoreNew is true (the duplicate-name check on create), the OR previously still matched saved pets; the AND now short-circuits to false, so duplicate names are no longer detected on creation. A short-circuit subtlety in a method other classes depend on.",
+      "injection": {
+        "find": "\t\t\t\tif (!ignoreNew || !pet.isNew()) {",
+        "replace_with": "\t\t\t\tif (!ignoreNew && !pet.isNew()) {"
+      },
+      "detection_hints": {
+        "must_mention_any": [
+          "ignoreNew",
+          "isNew",
+          "getPet",
+          "||",
+          "&&",
+          "duplicate",
+          "short-circuit",
+          "boolean"
+        ]
+      }
+    },
+    {
+      "id": "BUG_007",
+      "file": "NamedEntity.java",
+      "function": "name field",
+      "category": "validation_gap",
+      "severity": "medium",
+      "difficulty": "hard",
+      "security_relevant": false,
+      "description": "The @NotBlank constraint is removed from NamedEntity.name. Because Pet, PetType, Specialty and Vet all extend NamedEntity, this silently drops the 'name required' rule across every named entity at once — a one-line change with cross-cutting validation impact.",
+      "injection": {
+        "find": "\t@Column\n\t@NotBlank\n\tprivate String name;",
+        "replace_with": "\t@Column\n\tprivate String name;"
+      },
+      "detection_hints": {
+        "must_mention_any": [
+          "@NotBlank",
+          "NotBlank",
+          "name",
+          "NamedEntity",
+          "validation",
+          "required",
+          "blank"
+        ]
+      }
+    }
+  ]
+}

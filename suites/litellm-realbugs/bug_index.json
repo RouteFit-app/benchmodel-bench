@@ -1,0 +1,72 @@
+{
+  "benchmark_name": "LiteLLM Real Regressions",
+  "version": 1,
+  "repo": "https://github.com/BerriAI/litellm",
+  "base_branch": "litellm_internal_staging",
+  "buggy_branch": "benchmark/real-regression",
+  "created_at": "2026-06-26",
+  "tech_stack": "AI Frameworks",
+  "provenance": "real-regression",
+  "note": "Reverses the fix for the LiteLLM Proxy API-key-verification SQL injection (GHSA-r75f-5x8p-qvmc, Critical CVSS 9.3 / CWE-89), the AI gateway most production stacks put in front of their models. PrismaClient's combined_view token lookup built its SQL with the caller-supplied token mixed into the query text (WHERE v.token = '{token}') instead of binding it as a parameter; an unauthenticated request with a crafted Authorization: Bearer header reaches this query through the proxy's error-handling path, allowing read/modify of the proxy's own database (keys, budgets, spend). The fix bound the value as a parameter (WHERE v.token = $1, passed separately) and dropped the f-string. This suite reverses that: it restores the f-string interpolation of the raw token into the query and removes the bound parameter. The disguise: the value flows from an auth header through a key-verification helper, not an obvious user input, and a sibling variable named hashed_token sits right there, so a reviewer has to notice that raw token (not the hash) is concatenated into SQL.",
+  "file_locations": {
+    "utils.py": "litellm/proxy/utils.py"
+  },
+  "scoring": {
+    "detect_points": 10,
+    "correct_file_bonus": 3,
+    "correct_severity_bonus": 2,
+    "false_positive_penalty": -2,
+    "severity_weight": {
+      "high": 1.5,
+      "medium": 1.0,
+      "low": 0.5
+    }
+  },
+  "bugs": [
+    {
+      "id": "BUG_001",
+      "file": "utils.py",
+      "function": "PrismaClient.get_data (combined_view token lookup)",
+      "category": "sql_injection",
+      "owasp": "A03: Injection (CWE-89 SQL Injection)",
+      "severity": "high",
+      "severity_note": "GHSA-r75f-5x8p-qvmc is rated Critical (CVSS 9.3): unauthenticated SQL injection in the proxy key-verification path, reachable via a crafted Authorization header, allowing read/modify of the proxy database. Mapped to the board's high (its top tier), not inflated.",
+      "security_relevant": true,
+      "difficulty": "medium",
+      "provenance": "real-regression",
+      "cve": "GHSA-r75f-5x8p-qvmc (no CVE id assigned)",
+      "fixed_by": "https://github.com/BerriAI/litellm/commit/4dc416ee749122ca91e3bca095217478663419e7 (GHSA-r75f-5x8p-qvmc, fixed in v1.83.7-stable)",
+      "description": "Reverts the fix for the LiteLLM Proxy key-verification SQL injection (GHSA-r75f-5x8p-qvmc). In PrismaClient's combined_view branch, the token lookup builds a raw SQL string and runs it via _query_first_with_cached_plan_fallback. The fixed code binds the token as a parameter: the query reads WHERE v.token = $1 and hashed_token is passed as a separate argument (a plain, non-f string). This regression restores the vulnerable form: the string becomes an f-string again and interpolates the raw, caller-supplied token directly into the query text (WHERE v.token = '{token}'), and the bound parameter is removed. Because LiteLLM Proxy reaches this lookup during API-key verification on every LLM route, an unauthenticated attacker who sends a crafted Authorization: Bearer value can break out of the quoted literal and inject arbitrary SQL (reachable through the proxy's error-handling path per the advisory), reading or modifying the proxy's own database, the keys, budgets and spend it manages. The catch: a reviewer must see that the raw token (not the adjacent hashed_token) is concatenated into a SQL string via an f-string instead of being passed as a bound parameter, i.e. classic SQL injection. Flagging a generic 'string formatting in SQL' is partial; the catch names SQL injection and that the parameter binding was removed.",
+      "detection_hints": {
+        "must_mention_any": [
+          "sql injection",
+          "sqli",
+          "injection",
+          "parameter",
+          "parameterized",
+          "parameterize",
+          "bound parameter",
+          "$1",
+          "f-string",
+          "f\"\"\"",
+          "interpolat",
+          "concatenat",
+          "v.token",
+          "token",
+          "Authorization",
+          "Bearer",
+          "untrusted",
+          "CWE-89",
+          "string literal",
+          "query_first",
+          "raw query",
+          "unsanitized"
+        ]
+      },
+      "injection": {
+        "find": "                    sql_query = \"\"\"\n                        SELECT \n                            v.*,\n                            t.spend AS team_spend, \n                            t.max_budget AS team_max_budget,\n                            t.soft_budget AS team_soft_budget,\n                            t.tpm_limit AS team_tpm_limit,\n                            t.rpm_limit AS team_rpm_limit,\n                            t.models AS team_models,\n                            t.metadata AS team_metadata,\n                            t.blocked AS team_blocked,\n                            t.team_alias AS team_alias,\n                            t.metadata AS team_metadata,\n                            t.members_with_roles AS team_members_with_roles,\n                            t.object_permission_id AS team_object_permission_id,\n                            t.organization_id as org_id,\n                            p.project_alias AS project_alias,\n                            tm.spend AS team_member_spend,\n                            b_tm.tpm_limit AS team_member_tpm_limit,\n                            b_tm.rpm_limit AS team_member_rpm_limit,\n                            m.aliases AS team_model_aliases,\n                            -- Added comma to separate b.* columns\n                            b.max_budget AS litellm_budget_table_max_budget,\n                            b.tpm_limit AS litellm_budget_table_tpm_limit,\n                            b.rpm_limit AS litellm_budget_table_rpm_limit,\n                            b.model_max_budget as litellm_budget_table_model_max_budget,\n                            b.soft_budget as litellm_budget_table_soft_budget,\n                            o.metadata as organization_metadata,\n                            o.organization_alias as organization_alias,\n                            b2.max_budget as organization_max_budget,\n                            b2.tpm_limit as organization_tpm_limit,\n                            b2.rpm_limit as organization_rpm_limit\n                        FROM \"LiteLLM_VerificationToken\" AS v\n                        LEFT JOIN \"LiteLLM_TeamTable\" AS t ON v.team_id = t.team_id\n                        LEFT JOIN \"LiteLLM_TeamMembership\" AS tm ON v.team_id = tm.team_id AND tm.user_id = v.user_id\n                        LEFT JOIN \"LiteLLM_BudgetTable\" AS b_tm ON tm.budget_id = b_tm.budget_id\n                        LEFT JOIN \"LiteLLM_ModelTable\" m ON t.model_id = m.id\n                        LEFT JOIN \"LiteLLM_BudgetTable\" AS b ON v.budget_id = b.budget_id\n                        LEFT JOIN \"LiteLLM_ProjectTable\" AS p ON v.project_id = p.project_id\n                        LEFT JOIN \"LiteLLM_OrganizationTable\" AS o ON v.organization_id = o.organization_id\n                        LEFT JOIN \"LiteLLM_BudgetTable\" AS b2 ON o.budget_id = b2.budget_id\n                        WHERE v.token = $1\n                    \"\"\"\n\n                    response = await self._query_first_with_cached_plan_fallback(\n                        sql_query, hashed_token\n                    )",
+        "replace_with": "                    sql_query = f\"\"\"\n                        SELECT \n                            v.*,\n                            t.spend AS team_spend, \n                            t.max_budget AS team_max_budget,\n                            t.soft_budget AS team_soft_budget,\n                            t.tpm_limit AS team_tpm_limit,\n                            t.rpm_limit AS team_rpm_limit,\n                            t.models AS team_models,\n                            t.metadata AS team_metadata,\n                            t.blocked AS team_blocked,\n                            t.team_alias AS team_alias,\n                            t.metadata AS team_metadata,\n                            t.members_with_roles AS team_members_with_roles,\n                            t.object_permission_id AS team_object_permission_id,\n                            t.organization_id as org_id,\n                            p.project_alias AS project_alias,\n                            tm.spend AS team_member_spend,\n                            b_tm.tpm_limit AS team_member_tpm_limit,\n                            b_tm.rpm_limit AS team_member_rpm_limit,\n                            m.aliases AS team_model_aliases,\n                            -- Added comma to separate b.* columns\n                            b.max_budget AS litellm_budget_table_max_budget,\n                            b.tpm_limit AS litellm_budget_table_tpm_limit,\n                            b.rpm_limit AS litellm_budget_table_rpm_limit,\n                            b.model_max_budget as litellm_budget_table_model_max_budget,\n                            b.soft_budget as litellm_budget_table_soft_budget,\n                            o.metadata as organization_metadata,\n                            o.organization_alias as organization_alias,\n                            b2.max_budget as organization_max_budget,\n                            b2.tpm_limit as organization_tpm_limit,\n                            b2.rpm_limit as organization_rpm_limit\n                        FROM \"LiteLLM_VerificationToken\" AS v\n                        LEFT JOIN \"LiteLLM_TeamTable\" AS t ON v.team_id = t.team_id\n                        LEFT JOIN \"LiteLLM_TeamMembership\" AS tm ON v.team_id = tm.team_id AND tm.user_id = v.user_id\n                        LEFT JOIN \"LiteLLM_BudgetTable\" AS b_tm ON tm.budget_id = b_tm.budget_id\n                        LEFT JOIN \"LiteLLM_ModelTable\" m ON t.model_id = m.id\n                        LEFT JOIN \"LiteLLM_BudgetTable\" AS b ON v.budget_id = b.budget_id\n                        LEFT JOIN \"LiteLLM_ProjectTable\" AS p ON v.project_id = p.project_id\n                        LEFT JOIN \"LiteLLM_OrganizationTable\" AS o ON v.organization_id = o.organization_id\n                        LEFT JOIN \"LiteLLM_BudgetTable\" AS b2 ON o.budget_id = b2.budget_id\n                        WHERE v.token = '{token}'\n                    \"\"\"\n\n                    response = await self._query_first_with_cached_plan_fallback(\n                        sql_query\n                    )"
+      }
+    }
+  ]
+}

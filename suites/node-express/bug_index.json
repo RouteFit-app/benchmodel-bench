@@ -1,0 +1,205 @@
+{
+  "benchmark_name": "Node/Express (RealWorld)",
+  "version": 1,
+  "repo": "https://github.com/gothinkster/node-express-realworld-example-app",
+  "base_branch": "master",
+  "buggy_branch": "benchmark/node-express",
+  "created_at": "2026-06-23",
+  "tech_stack": "Node.js / Express",
+  "file_locations": {
+    "auth.ts": "src/app/routes/auth/auth.ts",
+    "token.utils.ts": "src/app/routes/auth/token.utils.ts",
+    "auth.service.ts": "src/app/routes/auth/auth.service.ts",
+    "article.service.ts": "src/app/routes/article/article.service.ts",
+    "auth.controller.ts": "src/app/routes/auth/auth.controller.ts",
+    "profile.service.ts": "src/app/routes/profile/profile.service.ts"
+  },
+  "scoring": {
+    "detect_points": 10,
+    "correct_file_bonus": 3,
+    "correct_severity_bonus": 2,
+    "false_positive_penalty": -2,
+    "severity_weight": {
+      "high": 1.5,
+      "medium": 1.0,
+      "low": 0.5
+    }
+  },
+  "bugs": [
+    {
+      "id": "BUG_001",
+      "file": "auth.ts",
+      "function": "auth.required",
+      "category": "broken_authentication",
+      "owasp": "A07: Identification and Authentication Failures",
+      "severity": "high",
+      "security_relevant": true,
+      "difficulty": "medium",
+      "description": "The express-jwt verification middleware now lists 'none' in its accepted `algorithms`. With `algorithms: ['HS256', 'none']` the server accepts an unsigned token (header alg=none, empty signature), so an attacker can hand-craft a token with any `user.id` and it is treated as authenticated. Classic JWT alg-none authentication bypass: every `auth.required` route is now forgeable, including account update and article mutation.",
+      "detection_hints": {
+        "must_mention_any": [
+          "algorithms",
+          "none",
+          "alg",
+          "unsigned",
+          "JWT",
+          "authentication bypass",
+          "forge",
+          "express-jwt",
+          "signature",
+          "verify"
+        ]
+      },
+      "injection": {
+        "find": "  required: jwt({\n    secret: process.env.JWT_SECRET || 'superSecret',\n    getToken: getTokenFromHeaders,\n    algorithms: ['HS256'],\n  }),",
+        "replace_with": "  required: jwt({\n    secret: process.env.JWT_SECRET || 'superSecret',\n    getToken: getTokenFromHeaders,\n    algorithms: ['HS256', 'none'],\n  }),"
+      }
+    },
+    {
+      "id": "BUG_002",
+      "file": "token.utils.ts",
+      "function": "generateToken",
+      "category": "cryptographic_failure",
+      "owasp": "A02: Cryptographic Failures",
+      "severity": "high",
+      "security_relevant": true,
+      "difficulty": "easy",
+      "description": "generateToken no longer reads the signing key from the environment. It was `process.env.JWT_SECRET || 'superSecret'`; now it always signs with the hardcoded literal 'superSecret'. Even when a strong JWT_SECRET is configured in production it is ignored, so every token is signed with a key that is published in the public source. Anyone can mint a valid token for any user id. Hardcoded/weak signing secret.",
+      "detection_hints": {
+        "must_mention_any": [
+          "JWT_SECRET",
+          "hardcoded",
+          "hard-coded",
+          "hard coded",
+          "superSecret",
+          "signing key",
+          "secret",
+          "process.env",
+          "forge",
+          "environment"
+        ]
+      },
+      "injection": {
+        "find": "  jwt.sign({ user: { id } }, process.env.JWT_SECRET || 'superSecret', {",
+        "replace_with": "  jwt.sign({ user: { id } }, 'superSecret', {"
+      }
+    },
+    {
+      "id": "BUG_003",
+      "file": "auth.service.ts",
+      "function": "createUser",
+      "category": "cryptographic_failure",
+      "owasp": "A02: Cryptographic Failures",
+      "severity": "high",
+      "security_relevant": true,
+      "difficulty": "easy",
+      "description": "createUser stopped hashing the password. `const hashedPassword = await bcrypt.hash(password, 10)` was replaced with `const hashedPassword = password`, so the user's plaintext password is written straight into the database `password` column. A database leak now exposes every user's actual password (and login still works because bcrypt.compare is only used elsewhere... here the stored value is plaintext). Storing credentials without hashing is a textbook cryptographic failure.",
+      "detection_hints": {
+        "must_mention_any": [
+          "bcrypt",
+          "hash",
+          "plaintext",
+          "plain text",
+          "hashedPassword",
+          "password",
+          "storing",
+          "cleartext",
+          "cryptographic",
+          "createUser"
+        ]
+      },
+      "injection": {
+        "find": "  const hashedPassword = await bcrypt.hash(password, 10);",
+        "replace_with": "  const hashedPassword = password;"
+      }
+    },
+    {
+      "id": "BUG_004",
+      "file": "article.service.ts",
+      "function": "deleteArticle",
+      "category": "broken_access_control",
+      "owasp": "A01: Broken Access Control",
+      "severity": "high",
+      "security_relevant": true,
+      "difficulty": "medium",
+      "description": "deleteArticle no longer verifies ownership. The guard `if (existingArticle.author.id !== id) { throw new HttpException(403, ...) }` was removed, so any authenticated user can delete any article just by knowing its slug (slugs are public and predictable). Broken object-level authorization / IDOR: the endpoint authenticates the caller but never authorizes the delete against the article's owner.",
+      "detection_hints": {
+        "must_mention_any": [
+          "deleteArticle",
+          "ownership",
+          "owner",
+          "author.id",
+          "authorized",
+          "IDOR",
+          "object-level",
+          "access control",
+          "authorization",
+          "any user can delete"
+        ]
+      },
+      "injection": {
+        "find": "  if (existingArticle.author.id !== id) {\n    throw new HttpException(403, {\n      message: 'You are not authorized to delete this article',\n    });\n  }\n  await prisma.article.delete({",
+        "replace_with": "  await prisma.article.delete({"
+      }
+    },
+    {
+      "id": "BUG_005",
+      "file": "auth.controller.ts",
+      "function": "login route",
+      "category": "logging_failure",
+      "owasp": "A09: Security Logging and Monitoring Failures",
+      "severity": "high",
+      "severity_note": "Logging plaintext credentials (CWE-532) is defensibly high: the password reaches stdout on every login and survives in any log aggregator with long retention. Flagged here for the same public bias-check as the OWASP suite, models that rate it medium/low diverge from the answer key.",
+      "security_relevant": true,
+      "difficulty": "easy",
+      "description": "The login route now logs the submitted email and plaintext password to stdout on every attempt (`console.log(... password=${req.body.user?.password})`). Credentials land in application logs and any downstream aggregator, exposed to anyone with log access and retained indefinitely. Sensitive data in logs, you must never log raw passwords.",
+      "detection_hints": {
+        "must_mention_any": [
+          "console.log",
+          "log",
+          "logging",
+          "plaintext password",
+          "password",
+          "credentials",
+          "sensitive",
+          "stdout",
+          "exposure",
+          "logs"
+        ]
+      },
+      "injection": {
+        "find": "router.post('/users/login', async (req: Request, res: Response, next: NextFunction) => {\n  try {\n    const user = await login(req.body.user);",
+        "replace_with": "router.post('/users/login', async (req: Request, res: Response, next: NextFunction) => {\n  try {\n    console.log(`[auth] login email=${req.body.user?.email} password=${req.body.user?.password}`);\n    const user = await login(req.body.user);"
+      }
+    },
+    {
+      "id": "BUG_006",
+      "file": "profile.service.ts",
+      "function": "getProfile",
+      "category": "sensitive_data_exposure",
+      "owasp": "A01: Broken Access Control",
+      "severity": "high",
+      "security_relevant": true,
+      "difficulty": "medium",
+      "description": "getProfile now returns the raw Prisma user record instead of the sanitized `profileMapper(profile, id)` projection. The findUnique has no `select`, so the returned object includes every scalar column, the user's email and their bcrypt password hash, exposed on the public, auth-optional GET /profiles/:username endpoint for any username. Sensitive data exposure / broken access control: the mapper that stripped private fields was bypassed.",
+      "detection_hints": {
+        "must_mention_any": [
+          "profileMapper",
+          "raw",
+          "email",
+          "password hash",
+          "sensitive",
+          "exposure",
+          "return profile",
+          "leak",
+          "getProfile",
+          "PII"
+        ]
+      },
+      "injection": {
+        "find": "  if (!profile) {\n    throw new HttpException(404, {});\n  }\n\n  return profileMapper(profile, id);",
+        "replace_with": "  if (!profile) {\n    throw new HttpException(404, {});\n  }\n\n  return profile;"
+      }
+    }
+  ]
+}

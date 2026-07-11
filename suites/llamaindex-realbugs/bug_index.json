@@ -1,0 +1,50 @@
+{
+  "benchmark_name": "LlamaIndex Real Regressions",
+  "version": 1,
+  "repo": "https://github.com/run-llama/llama_index",
+  "base_branch": "main",
+  "buggy_branch": "benchmark/real-regression",
+  "created_at": "2026-06-26",
+  "tech_stack": "AI Frameworks",
+  "provenance": "real-regression",
+  "note": "Reverses part of the fix for CVE-2025-1793 (Critical, CVSS 9.8 / CWE-89), the SQL injection across LlamaIndex vector-store integrations. This suite targets the ClickHouse vector store: _append_meta_filter_condition builds a metadata-filter WHERE clause by interpolating query filter keys/values into a JSONExtractString(...) = '...' SQL fragment. The fix wrapped both the key and value in escape_str(); this suite removes that escaping (and the comment the fix added), so an attacker-controlled metadata filter value can break out of the quoted string and inject arbitrary SQL. Diff-visible: the reviewer sees user-supplied filter_item.key/value interpolated raw into a SQL string while the escape_str helper (defined in the same file and used 9x elsewhere) is conspicuously not applied on this one path.",
+  "file_locations": {
+    "base.py": "llama-index-integrations/vector_stores/llama-index-vector-stores-clickhouse/llama_index/vector_stores/clickhouse/base.py"
+  },
+  "scoring": {
+    "detect_points": 10,
+    "correct_file_bonus": 3,
+    "correct_severity_bonus": 2,
+    "false_positive_penalty": -2,
+    "severity_weight": { "high": 1.5, "medium": 1.0, "low": 0.5 }
+  },
+  "bugs": [
+    {
+      "id": "BUG_001",
+      "file": "base.py",
+      "function": "ClickHouseVectorStore._append_meta_filter_condition",
+      "category": "sql_injection",
+      "owasp": "A03: Injection (CWE-89 SQL Injection)",
+      "severity": "high",
+      "severity_note": "CVE-2025-1793 is rated Critical (CVSS 9.8): unauthenticated SQL injection allowing arbitrary read/write of the backing store. Mapped to the board's high (its top tier), not inflated.",
+      "security_relevant": true,
+      "difficulty": "medium",
+      "provenance": "real-regression",
+      "cve": "CVE-2025-1793",
+      "fixed_by": "https://github.com/run-llama/llama_index/pull/18316 (commit 201d3f540, CVE-2025-1793 / CWE-89, patched in llama-index 0.12.28)",
+      "description": "Reverts part of the fix for CVE-2025-1793. ClickHouseVectorStore._append_meta_filter_condition builds the metadata-filter clause of a query by interpolating each filter's key and value into a SQL fragment: JSONExtractString(<metadata_column>, '<key>') = '<value>'. The filter key/value come from the caller's MetadataFilters (query-time, attacker-influenceable in any app that exposes search). The fix wrapped both in escape_str() before interpolation; this regression removes the escaping (key = filter_item.key; value = filter_item.value) and deletes the 'properly escaped keys and values' comment, so a value such as ' OR 1=1 -- closes the quoted literal and injects arbitrary SQL into the generated query (CWE-89), enabling unauthorized read/write of the vector store. The catch: a reviewer must see that user-controlled filter_item.key/filter_item.value are concatenated raw into a SQL string with no parameterization or escaping, while the escape_str helper used everywhere else in this file is pointedly absent here. Flagging a generic 'unsanitized input' is partial; the catch names SQL injection via the metadata filter and that escaping was dropped.",
+      "detection_hints": {
+        "must_mention_any": [
+          "sql injection", "sqli", "injection", "escape_str", "escape", "sanitize",
+          "parameterized", "parameterize", "filter_item", "JSONExtractString",
+          "metadata filter", "concatenat", "interpolat", "unsanitized", "CWE-89",
+          "quote", "string literal", "untrusted"
+        ]
+      },
+      "injection": {
+        "find": "            # Use JSONExtractString function with properly escaped keys and values\n            key = escape_str(filter_item.key)\n            value = escape_str(filter_item.value)",
+        "replace_with": "            key = filter_item.key\n            value = filter_item.value"
+      }
+    }
+  ]
+}

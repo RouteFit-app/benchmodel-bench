@@ -1,0 +1,49 @@
+{
+  "benchmark_name": "LangChain Deserialization Regressions",
+  "version": 1,
+  "repo": "https://github.com/langchain-ai/langchain",
+  "base_branch": "master",
+  "buggy_branch": "benchmark/real-regression-deser",
+  "created_at": "2026-06-25",
+  "tech_stack": "AI Frameworks",
+  "provenance": "real-regression",
+  "note": "Reverses part of the fix for CVE-2025-68664 ('LangGrinch', CVSS 9.3), the serialization-injection RCE in langchain-core. The remediation added a default init-validator that blocks template_format='jinja2' during deserialization (jinja2 templates execute arbitrary code -> SSTI/RCE). This suite defeats that guard by a one-character change: the check compares against 'jinja' instead of the real value 'jinja2', so jinja2 templates are no longer blocked. Subtle-but-fair: the function name (_block_jinja2_templates), its docstring, and its raise message all reference 'jinja2', so a careful reviewer spots that the comparison string is wrong and the guard never fires.",
+  "file_locations": {
+    "load.py": "libs/core/langchain_core/load/load.py"
+  },
+  "scoring": {
+    "detect_points": 10,
+    "correct_file_bonus": 3,
+    "correct_severity_bonus": 2,
+    "false_positive_penalty": -2,
+    "severity_weight": { "high": 1.5, "medium": 1.0, "low": 0.5 }
+  },
+  "bugs": [
+    {
+      "id": "BUG_001",
+      "file": "load.py",
+      "function": "_block_jinja2_templates",
+      "category": "template_injection_rce",
+      "owasp": "A03: Injection (SSTI / CWE-94 code injection)",
+      "severity": "high",
+      "severity_note": "Part of CVE-2025-68664 (LangGrinch), rated CVSS 9.3 critical; the board's scale tops out at 'high', so it's weighted at the ceiling, not inflated.",
+      "security_relevant": true,
+      "difficulty": "medium",
+      "provenance": "real-regression",
+      "cve": "CVE-2025-68664",
+      "fixed_by": "https://github.com/langchain-ai/langchain (CVE-2025-68664 / GHSA-c67j-w6g6-q2cm, fixed in langchain-core 1.2.5 / 0.3.81; the fix's default init_validator blocks jinja2 templates during deserialization)",
+      "description": "Defeats the jinja2-template block that CVE-2025-68664's fix added to the deserialization path. _block_jinja2_templates is the default init-validator run before any class is instantiated by load()/loads(); it is meant to raise when a deserialized object carries template_format='jinja2', because jinja2 templates execute arbitrary code (server-side template injection -> RCE). The regression changes the comparison from `kwargs.get(\"template_format\") == \"jinja2\"` to `== \"jinja\"`. Since LangChain's actual format value is the string 'jinja2', the guard now never matches, and jinja2 templates pass straight through during deserialization, reopening the SSTI/RCE vector on untrusted manifests. Every other signal in the function still says jinja2: the name _block_jinja2_templates, the docstring ('blocked... template_format=\\'jinja2\\''), and the raise message ('Jinja2 templates are not allowed'). The reviewer must notice that the comparison string ('jinja') no longer matches the value the guard is supposed to block ('jinja2'), so the protection is silently disabled. Flagging it as merely a 'string typo' without naming the SSTI/RCE consequence is a partial catch.",
+      "detection_hints": {
+        "must_mention_any": [
+          "jinja2", "jinja", "template", "SSTI", "server-side template injection", "template injection",
+          "RCE", "code execution", "code injection", "deserialization", "_block_jinja2_templates",
+          "template_format", "guard", "bypass", "never matches", "disabled"
+        ]
+      },
+      "injection": {
+        "find": "    if kwargs.get(\"template_format\") == \"jinja2\":",
+        "replace_with": "    if kwargs.get(\"template_format\") == \"jinja\":"
+      }
+    }
+  ]
+}

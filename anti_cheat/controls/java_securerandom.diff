@@ -1,0 +1,11 @@
+diff --git a/src/main/java/app/TokenFactory.java b/src/main/java/app/TokenFactory.java
+--- a/src/main/java/app/TokenFactory.java
++++ b/src/main/java/app/TokenFactory.java
+@@ -9,8 +9,9 @@ public String newSessionToken() {
+-        Random rnd = new Random();
++        // cryptographically strong source for session tokens
++        SecureRandom rnd = new SecureRandom();
+         byte[] buf = new byte[32];
+         rnd.nextBytes(buf);
+         return Base64.getUrlEncoder().withoutPadding().encodeToString(buf);
+     }

@@ -1,0 +1,8 @@
+diff --git a/app/thumbnails.py b/app/thumbnails.py
+--- a/app/thumbnails.py
++++ b/app/thumbnails.py
+@@ -6,7 +6,8 @@ import subprocess
+ def make_thumbnail(src_path: str, dest_path: str):
+-    os.system("convert " + src_path + " -resize 200x200 " + dest_path)
++    # pass args as a list with no shell, so metacharacters are not interpreted
++    subprocess.run(["convert", src_path, "-resize", "200x200", dest_path], shell=False, check=True)

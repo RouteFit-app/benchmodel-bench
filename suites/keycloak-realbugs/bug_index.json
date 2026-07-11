@@ -1,0 +1,119 @@
+{
+  "benchmark_name": "Keycloak Real Regressions",
+  "version": 1,
+  "repo": "https://github.com/keycloak/keycloak",
+  "base_branch": "main",
+  "buggy_branch": "benchmark/real-regression",
+  "created_at": "2026-06-24",
+  "tech_stack": "Java",
+  "provenance": "real-regression",
+  "note": "Each bug is the exact reverse of a real, merged Keycloak bug-fix, i.e. the original regression that actually shipped before maintainers fixed it. No synthetic bugs. Cut the buggy branch from main and the reviewer must catch what Keycloak's own maintainers later patched.",
+  "file_locations": {
+    "ImmutableAttributeValidator.java": "services/src/main/java/org/keycloak/userprofile/validator/ImmutableAttributeValidator.java",
+    "IdpCreateUserIfUniqueAuthenticator.java": "services/src/main/java/org/keycloak/authentication/authenticators/broker/IdpCreateUserIfUniqueAuthenticator.java",
+    "DefaultKeycloakSession.java": "services/src/main/java/org/keycloak/services/DefaultKeycloakSession.java",
+    "InfinispanOrganizationProvider.java": "model/infinispan/src/main/java/org/keycloak/models/cache/infinispan/organization/InfinispanOrganizationProvider.java"
+  },
+  "scoring": {
+    "detect_points": 10,
+    "correct_file_bonus": 3,
+    "correct_severity_bonus": 2,
+    "false_positive_penalty": -2,
+    "severity_weight": { "high": 1.5, "medium": 1.0, "low": 0.5 }
+  },
+  "bugs": [
+    {
+      "id": "BUG_001",
+      "file": "IdpCreateUserIfUniqueAuthenticator.java",
+      "function": "authenticateImpl",
+      "category": "improper_validation",
+      "owasp": "A07: Identification and Authentication Failures",
+      "severity": "medium",
+      "severity_note": "Recalibrated high->medium after the first run: both reviewers independently rated it below high (GPT low, Claude medium), and the regression bounces to update-profile in most flows rather than breaching auth. A public bias-check, on a real regression, moving our key DOWN to match where reviewers converged.",
+      "security_relevant": true,
+      "difficulty": "medium",
+      "provenance": "real-regression",
+      "fixed_by": "https://github.com/keycloak/keycloak/commit/b6027fe65d",
+      "description": "When a brokered (OIDC/SAML) login derives the username from an attribute mapper and the referenced attribute is missing, the mapper can produce an empty or whitespace-only username. The guard only checks `username == null`, not blank, so a user account is created with an empty/whitespace username instead of bouncing the user to the update-profile flow. The real fix added `|| username.trim().isEmpty()`. Reverting it reintroduces blank-username account creation via federated identity.",
+      "detection_hints": {
+        "must_mention_any": [
+          "username", "empty", "blank", "whitespace", "trim", "isEmpty",
+          "null check", "only checks null", "missing attribute", "broker"
+        ]
+      },
+      "injection": {
+        "find": "        if (username == null || username.trim().isEmpty()) {",
+        "replace_with": "        if (username == null) {"
+      }
+    },
+    {
+      "id": "BUG_002",
+      "file": "ImmutableAttributeValidator.java",
+      "function": "validate",
+      "category": "case_sensitivity",
+      "owasp": "Not applicable (correctness)",
+      "severity": "medium",
+      "security_relevant": true,
+      "difficulty": "medium",
+      "provenance": "real-regression",
+      "fixed_by": "https://github.com/keycloak/keycloak/commit/5d37617911",
+      "description": "The immutable-attribute validator lower-cases usernames before comparing against stored values (so a differently-cased value from external storage doesn't look like an illegal change), but NOT emails. With a read-only LDAP that returns an uppercase email, an unrelated update (e.g. toggling emailVerified) fails with a spurious 'attribute is read-only' error because the cased email mismatches. The real fix extended the lower-casing to EMAIL. Reverting it drops emails from the normalization, reintroducing the case-sensitivity regression.",
+      "detection_hints": {
+        "must_mention_any": [
+          "email", "lower", "lowercase", "toLowerCase", "case", "case-sensitiv",
+          "EMAIL", "normaliz", "comparison", "immutable"
+        ]
+      },
+      "injection": {
+        "find": "        // force usernames and emails to lower-case to avoid validation errors if the external storage is using a different format\n        if ((!user.isFederated() && UserModel.USERNAME.equals(inputHint)) || UserModel.EMAIL.equals(inputHint)) {",
+        "replace_with": "        // force usernames to lower-case to avoid validation errors if the external storage is using a different format\n        if (!user.isFederated() && UserModel.USERNAME.equals(inputHint)) {"
+      }
+    },
+    {
+      "id": "BUG_003",
+      "file": "DefaultKeycloakSession.java",
+      "function": "getComponentProvider",
+      "category": "null_pointer",
+      "owasp": "Not applicable (correctness)",
+      "severity": "medium",
+      "security_relevant": false,
+      "difficulty": "hard",
+      "provenance": "real-regression",
+      "fixed_by": "https://github.com/keycloak/keycloak/commit/4d5f69098b",
+      "description": "`Optional.ofNullable(realm.getId())` looks like it guards against a null realm, but it doesn't: `realm.getId()` is evaluated BEFORE `ofNullable`, so when `realm` itself is null the call NPEs before the Optional ever helps. The Optional only guards the *id* being null, not the *realm*. The real fix changed it to `Optional.ofNullable(realm).map(RealmModel::getId)`, which actually short-circuits on a null realm. Reverting reintroduces the NPE-on-null-realm. The bug is subtle precisely because the Optional reads as if it already handles null.",
+      "detection_hints": {
+        "must_mention_any": [
+          "Optional", "ofNullable", "realm", "getId", "NPE", "NullPointer",
+          "evaluated before", "guard", "map(", "null realm"
+        ]
+      },
+      "injection": {
+        "find": "        return getOrCreateProvider(key, () -> factory.getProviderFactory(clazz, Optional.ofNullable(realm).map(RealmModel::getId).orElse(null), componentId, modelGetter));",
+        "replace_with": "        return getOrCreateProvider(key, () -> factory.getProviderFactory(clazz, Optional.ofNullable(realm.getId()).orElse(null), componentId, modelGetter));"
+      }
+    },
+    {
+      "id": "BUG_004",
+      "file": "InfinispanOrganizationProvider.java",
+      "function": "cacheKeyByDomain",
+      "category": "case_sensitivity",
+      "owasp": "Not applicable (correctness)",
+      "severity": "medium",
+      "security_relevant": false,
+      "difficulty": "medium",
+      "provenance": "real-regression",
+      "fixed_by": "https://github.com/keycloak/keycloak/commit/e0dfe8d5b1",
+      "description": "`cacheKeyByDomain` builds an organization cache key from the email domain without normalizing case, so the same domain in different cases (EXAMPLE.org vs example.org) maps to different cache keys, organization-by-domain lookups miss the cache and can fail, and a null domain throws an NPE deep in the cache layer. The real fix added a null guard and `.toLowerCase()`. Reverting removes both, reintroducing the mixed-case cache-miss and null-domain NPE.",
+      "detection_hints": {
+        "must_mention_any": [
+          "domain", "toLowerCase", "case", "cache key", "cacheKeyByDomain",
+          "mixed-case", "null", "NPE", "normaliz", "domainName"
+        ]
+      },
+      "injection": {
+        "find": "    public static String cacheKeyByDomain(RealmModel realm, String domainName) {\n        if (domainName == null) {\n            throw new IllegalArgumentException(\"domainName must not be null\");\n        }\n        return realm.getId() + \".org.domain.name.\" + domainName.toLowerCase();\n    }",
+        "replace_with": "    public static String cacheKeyByDomain(RealmModel realm, String domainName) {\n        return realm.getId() + \".org.domain.name.\" + domainName;\n    }"
+      }
+    }
+  ]
+}

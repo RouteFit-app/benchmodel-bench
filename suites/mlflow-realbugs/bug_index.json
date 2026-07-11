@@ -1,0 +1,49 @@
+{
+  "benchmark_name": "MLflow Real Regressions",
+  "version": 1,
+  "repo": "https://github.com/mlflow/mlflow",
+  "base_branch": "master",
+  "buggy_branch": "benchmark/real-regression",
+  "created_at": "2026-06-26",
+  "tech_stack": "AI Frameworks",
+  "provenance": "real-regression",
+  "note": "Reverses the fix for CVE-2026-2033 (High, CVSS 8.1 / ZDI-CAN-26649), the artifact-handler path traversal in MLflow's FileStore. An attacker plants a malicious meta.yaml inside a run's artifacts/ folder with an arbitrary artifact_uri, then references 'artifacts' as a run id; the fix made _find_run_root validate that a candidate directory really is a run (has metrics/params/artifacts subdirs) so the artifacts folder can't be treated as a run and its attacker-controlled artifact_uri can't be used to read/write arbitrary host paths. This suite removes that validation. Diff-visible: the reviewer sees a 'prevent path traversal via malicious meta.yaml' guard deleted.",
+  "file_locations": {
+    "file_store.py": "mlflow/store/tracking/file_store.py"
+  },
+  "scoring": {
+    "detect_points": 10,
+    "correct_file_bonus": 3,
+    "correct_severity_bonus": 2,
+    "false_positive_penalty": -2,
+    "severity_weight": { "high": 1.5, "medium": 1.0, "low": 0.5 }
+  },
+  "bugs": [
+    {
+      "id": "BUG_001",
+      "file": "file_store.py",
+      "function": "FileStore._find_run_root",
+      "category": "path_traversal",
+      "owasp": "A01: Broken Access Control (CWE-22 Path Traversal -> arbitrary file access / RCE)",
+      "severity": "high",
+      "severity_note": "CVE-2026-2033 is rated High (CVSS 8.1): artifact-handler path traversal leading to arbitrary file read/write and RCE. Mapped to the board's high, not inflated.",
+      "security_relevant": true,
+      "difficulty": "medium",
+      "provenance": "real-regression",
+      "cve": "CVE-2026-2033",
+      "fixed_by": "https://github.com/mlflow/mlflow/pull/19260 (CVE-2026-2033 / ZDI-CAN-26649, fixed in MLflow 3.8.0)",
+      "description": "Reverts the fix for CVE-2026-2033. _find_run_root resolves a run id to a directory on disk. The fix added a check, `if validate_structure and not self._is_valid_run_directory(run_dir): continue`, so a candidate directory is only accepted as a run when it actually has the metrics/, params/, and artifacts/ subdirectories a real run has. Without it, an attacker who can write into a run's artifacts/ folder plants a malicious meta.yaml (with run_id 'artifacts' and an arbitrary artifact_uri) and then requests the run id 'artifacts'; the artifacts folder is accepted as a run, its attacker-controlled artifact_uri is trusted, and artifact operations read or write arbitrary paths on the host, the directory traversal that enables arbitrary file access and RCE. The regression deletes the validation block and returns the matched directory directly. The reviewer must recognize that removing the run-directory-structure check reopens a path traversal via a planted meta.yaml; the deleted comment ('prevent path traversal via malicious meta.yaml in artifact folders, ZDI-CAN-26649') is the fair tell. Flagging a generic 'removed a validation' is partial; the catch names the path-traversal / arbitrary-file-access impact.",
+      "detection_hints": {
+        "must_mention_any": [
+          "path traversal", "directory traversal", "traversal", "validate", "validation",
+          "run directory", "meta.yaml", "malicious", "artifact", "ZDI", "_is_valid_run_directory",
+          "structure", "arbitrary file", "CWE-22", "RCE"
+        ]
+      },
+      "injection": {
+        "find": "            run_dir = runs[0]\n            # NB: Validate run directory structure to prevent path traversal via malicious\n            # meta.yaml in artifact folders (ZDI-CAN-26649)\n            if validate_structure and not self._is_valid_run_directory(run_dir):\n                continue\n            return os.path.basename(os.path.abspath(experiment_dir)), run_dir",
+        "replace_with": "            return os.path.basename(os.path.abspath(experiment_dir)), runs[0]"
+      }
+    }
+  ]
+}

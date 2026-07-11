@@ -1,0 +1,204 @@
+{
+  "benchmark_name": "FastAPI Hard Mode",
+  "version": 1,
+  "repo": "https://github.com/fastapi/full-stack-fastapi-template",
+  "base_branch": "master",
+  "buggy_branch": "benchmark/hardmode-fastapi",
+  "created_at": "2026-06-23",
+  "tech_stack": "Python / FastAPI",
+  "file_locations": {
+    "users.py": "backend/app/api/routes/users.py",
+    "deps.py": "backend/app/api/deps.py",
+    "crud.py": "backend/app/crud.py",
+    "models.py": "backend/app/models.py",
+    "items.py": "backend/app/api/routes/items.py",
+    "login.py": "backend/app/api/routes/login.py"
+  },
+  "scoring": {
+    "detect_points": 10,
+    "correct_file_bonus": 3,
+    "correct_severity_bonus": 2,
+    "false_positive_penalty": -2,
+    "severity_weight": {
+      "high": 1.5,
+      "medium": 1.0,
+      "low": 0.5
+    }
+  },
+  "bugs": [
+    {
+      "id": "BUG_001",
+      "file": "users.py",
+      "function": "read_user_me",
+      "category": "sensitive_data_exposure",
+      "owasp": "A02: Cryptographic Failures",
+      "severity": "high",
+      "security_relevant": true,
+      "difficulty": "hard",
+      "description": "The GET /users/me route's `response_model` was changed from `UserPublic` to `User`. `UserPublic` is the public projection (no secrets); `User` is the table model, which includes the `hashed_password` column. With `response_model=User`, FastAPI now serializes the caller's password hash into every /users/me response. The change is a single identifier swap and the diff shows nothing obviously dangerous, you only see the leak if you know that `User` exposes `hashed_password` while `UserPublic` does not (that distinction lives in models.py, not in this hunk). Sensitive-data exposure that needs cross-file knowledge of the two schemas rather than pattern matching.",
+      "detection_hints": {
+        "must_mention_any": [
+          "response_model",
+          "UserPublic",
+          "User",
+          "hashed_password",
+          "password hash",
+          "leak",
+          "exposure",
+          "read_user_me",
+          "serialize",
+          "public schema"
+        ]
+      },
+      "injection": {
+        "find": "@router.get(\"/me\", response_model=UserPublic)\ndef read_user_me(current_user: CurrentUser) -> Any:",
+        "replace_with": "@router.get(\"/me\", response_model=User)\ndef read_user_me(current_user: CurrentUser) -> Any:"
+      }
+    },
+    {
+      "id": "BUG_002",
+      "file": "deps.py",
+      "function": "get_current_user",
+      "category": "broken_access_control",
+      "owasp": "A01: Broken Access Control",
+      "severity": "high",
+      "security_relevant": true,
+      "difficulty": "hard",
+      "description": "The `is_active` enforcement was removed from `get_current_user`. Previously a disabled user (`is_active = False`) was rejected with 400 Inactive user on every authenticated request; now only existence is checked. As a result, deactivating or suspending an account no longer takes effect, any already-issued token for a disabled user keeps working everywhere `CurrentUser` is required. Account deactivation becomes a no-op, an authorization-lifecycle bug that is silent because login still rejects inactive users (only the per-request guard is gone).",
+      "detection_hints": {
+        "must_mention_any": [
+          "is_active",
+          "Inactive user",
+          "get_current_user",
+          "deactivat",
+          "disabled",
+          "suspended",
+          "still works",
+          "lifecycle",
+          "revoke",
+          "access control"
+        ]
+      },
+      "injection": {
+        "find": "    user = session.get(User, token_data.sub)\n    if not user:\n        raise HTTPException(status_code=404, detail=\"User not found\")\n    if not user.is_active:\n        raise HTTPException(status_code=400, detail=\"Inactive user\")\n    return user",
+        "replace_with": "    user = session.get(User, token_data.sub)\n    if not user:\n        raise HTTPException(status_code=404, detail=\"User not found\")\n    return user"
+      }
+    },
+    {
+      "id": "BUG_003",
+      "file": "crud.py",
+      "function": "update_user",
+      "category": "broken_authentication",
+      "owasp": "A07: Identification and Authentication Failures",
+      "severity": "medium",
+      "security_relevant": true,
+      "difficulty": "hard",
+      "description": "`update_user` still computes `extra_data['hashed_password']` from the submitted password but no longer passes it: `db_user.sqlmodel_update(user_data, update=extra_data)` became `db_user.sqlmodel_update(user_data)`. `user_data` carries the plaintext `password` field, which is not a column on `User` (the column is `hashed_password`), so the password change is silently dropped, the user keeps their old password and the freshly computed hash is discarded. An admin password reset (and the password-reset flow that calls this) appears to succeed but does nothing, leaving stale or compromised credentials in place. The dropped `update=extra_data` is easy to miss because `extra_data` is still built right above it.",
+      "detection_hints": {
+        "must_mention_any": [
+          "extra_data",
+          "hashed_password",
+          "sqlmodel_update",
+          "update=",
+          "password",
+          "silently",
+          "not applied",
+          "update_user",
+          "discarded",
+          "no-op"
+        ]
+      },
+      "injection": {
+        "find": "    db_user.sqlmodel_update(user_data, update=extra_data)",
+        "replace_with": "    db_user.sqlmodel_update(user_data)"
+      }
+    },
+    {
+      "id": "BUG_004",
+      "file": "models.py",
+      "function": "Item.owner_id",
+      "category": "data_integrity",
+      "owasp": "Not applicable (correctness)",
+      "severity": "medium",
+      "security_relevant": false,
+      "difficulty": "hard",
+      "description": "The `owner_id` foreign key's `ondelete` was changed from `CASCADE` to `SET NULL`, but the column is still declared `nullable=False`. SET NULL tells the database to null the FK of dependent rows when a user is deleted, which immediately violates the NOT NULL constraint, so deleting a user that owns items now raises an integrity error instead of cascade-deleting their items. It also conflicts with the `cascade_delete=True` still set on the `User.items` relationship. A self-contradictory FK definition (`nullable=False` + `ondelete=SET NULL`) that only surfaces on a delete and only if you know how the two settings interact.",
+      "detection_hints": {
+        "must_mention_any": [
+          "ondelete",
+          "SET NULL",
+          "CASCADE",
+          "nullable=False",
+          "foreign key",
+          "owner_id",
+          "integrity",
+          "NOT NULL",
+          "delete",
+          "constraint"
+        ]
+      },
+      "injection": {
+        "find": "    owner_id: uuid.UUID = Field(\n        foreign_key=\"user.id\", nullable=False, ondelete=\"CASCADE\"\n    )",
+        "replace_with": "    owner_id: uuid.UUID = Field(\n        foreign_key=\"user.id\", nullable=False, ondelete=\"SET NULL\"\n    )"
+      }
+    },
+    {
+      "id": "BUG_005",
+      "file": "items.py",
+      "function": "update_item",
+      "category": "data_loss",
+      "owasp": "Not applicable (correctness)",
+      "severity": "medium",
+      "security_relevant": false,
+      "difficulty": "hard",
+      "description": "`update_item` changed `item_in.model_dump(exclude_unset=True)` to `exclude_unset=False`. With `exclude_unset=False` the dump includes every field of `ItemUpdate` at its default, so a PATCH/PUT that sends only `title` will also carry `description=None` and `item.sqlmodel_update(update_dict)` will overwrite the stored description with null. The result is silent data loss on partial updates: editing one field blanks any field the client did not resend. The change looks innocuous, the two `exclude_unset` values read as equivalent unless you reason about partial-update semantics.",
+      "detection_hints": {
+        "must_mention_any": [
+          "exclude_unset",
+          "model_dump",
+          "partial update",
+          "description",
+          "overwrite",
+          "null",
+          "data loss",
+          "update_item",
+          "PATCH",
+          "default"
+        ]
+      },
+      "injection": {
+        "find": "    update_dict = item_in.model_dump(exclude_unset=True)",
+        "replace_with": "    update_dict = item_in.model_dump(exclude_unset=False)"
+      }
+    },
+    {
+      "id": "BUG_006",
+      "file": "login.py",
+      "function": "login_access_token",
+      "category": "broken_authentication",
+      "owasp": "A07: Identification and Authentication Failures",
+      "severity": "medium",
+      "security_relevant": true,
+      "difficulty": "hard",
+      "description": "The access-token TTL changed from `timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)` to `timedelta(days=...)`. The same numeric setting is now interpreted as DAYS, so a value meant to be minutes (the template's constant is 60*24*8 minutes) becomes that many DAYS, the access token is effectively non-expiring. Access tokens are bearer credentials with no server-side revocation, so a stolen or leaked token stays valid for years. A one-word unit change (minutes to days) that reads like an ordinary timedelta and only bites if you connect the unit to what the setting actually holds.",
+      "detection_hints": {
+        "must_mention_any": [
+          "timedelta",
+          "days",
+          "minutes",
+          "ACCESS_TOKEN_EXPIRE_MINUTES",
+          "expiration",
+          "expiry",
+          "token lifetime",
+          "long-lived",
+          "never expire",
+          "TTL"
+        ]
+      },
+      "injection": {
+        "find": "    access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)",
+        "replace_with": "    access_token_expires = timedelta(days=settings.ACCESS_TOKEN_EXPIRE_MINUTES)"
+      }
+    }
+  ]
+}

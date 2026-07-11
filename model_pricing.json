@@ -1,0 +1,17 @@
+{
+  "_notes": "USD per 1,000,000 tokens. VERIFY these against each provider's current pricing before publishing cost numbers; they change often. Snapshot the date whenever you edit. 'deepseek-chat' and 'gpt-4o' rates below are best-effort and should be confirmed against your actual BYOK billing.",
+  "_snapshot_date": "2026-07",
+  "_source": "provider pricing pages, July 2026",
+  "models": {
+    "claude-opus-4-8":   { "input_per_mtok": 5.00, "output_per_mtok": 25.00 },
+    "claude-sonnet-4-6": { "input_per_mtok": 3.00, "output_per_mtok": 15.00 },
+    "gemini-2.5-pro":    { "input_per_mtok": 1.25, "output_per_mtok": 10.00 },
+    "gpt-4o":            { "input_per_mtok": 2.50, "output_per_mtok": 10.00 },
+    "deepseek-chat":     { "input_per_mtok": 0.28, "output_per_mtok": 0.88 }
+  },
+  "_estimation": {
+    "chars_per_token": 4.0,
+    "scaffold_tokens": 600,
+    "_scaffold_note": "Fixed prompt overhead (system + instructions + task + writer_summary) added to every input estimate. Tune to your actual review prompt length."
+  }
+}

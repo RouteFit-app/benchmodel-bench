@@ -1,0 +1,53 @@
+{
+  "_template_note": "Copy this file to suites/<stack>/bug_index.json and replace every <...> placeholder. Keys starting with '_' are documentation and should be deleted in a real suite. Schema matches benchmark/bug_index.json, plus the 'file_locations' field (see suites/README.md).",
+  "benchmark_name": "<Human-readable name, e.g. 'FastAPI Full-Stack Bug Injection'>",
+  "_version_note": "Bump 'version' (keep benchmark_name the SAME) when you evolve the bug set -- e.g. swap easy bugs for harder ones. v1 stays on the leaderboard; the higher version groups above it as 'Current'.",
+  "version": 1,
+  "repo": "<https://github.com/your-fork/target-repo>",
+  "base_branch": "main",
+  "buggy_branch": "benchmark/buggy",
+  "created_at": "<YYYY-MM-DD>",
+  "_file_locations_note": "Maps the short 'file' name used in each bug to its path relative to the repo root. Moves the old hardcoded apply_bugs.py FILE_LOCATIONS map into the suite so the suite is self-contained.",
+  "file_locations": {
+    "<ShortName.py>": "<app/api/short_name.py>",
+    "<Other.tsx>": "<frontend/src/components/Other.tsx>"
+  },
+  "_scoring_note": "Keep these identical across suites unless you deliberately want a stack scored differently. Copied from RouteFit so leaderboards stay comparable.",
+  "scoring": {
+    "detect_points": 10,
+    "correct_file_bonus": 3,
+    "correct_severity_bonus": 2,
+    "false_positive_penalty": -2,
+    "severity_weight": {
+      "high": 1.5,
+      "medium": 1.0,
+      "low": 0.5
+    }
+  },
+  "_bugs_note": "Each injection's find/replace_with text MUST appear exactly once in the real file (apply_bugs.py aborts otherwise). severity = the bug's impact (high/medium/low); difficulty = how hard it is to DETECT (easy/medium/hard/expert) -- independent axes. Aim for ~8-10 bugs spanning severities, difficulties, categories. Below is one worked EXAMPLE -- delete it and write real ones.",
+  "bugs": [
+    {
+      "id": "BUG_001",
+      "file": "<ShortName.py>",
+      "function": "<function_or_endpoint_name>",
+      "category": "<auth_bypass | api_contract | orm_query_error | caching_bug | null_safety | validation_gap | resource_leak | race_condition | unit_conversion_error | data_loss>",
+      "severity": "high",
+      "difficulty": "<easy | medium | hard | expert>",
+      "security_relevant": true,
+      "description": "<One or two sentences: what the change does and why it's wrong / what it breaks downstream. Be specific and objective.>",
+      "injection": {
+        "find": "<exact source text present exactly once, including indentation and trailing newline if relevant>",
+        "replace_with": "<the buggy replacement>"
+      },
+      "_injection_alt": "Instead of find/replace_with, you may use a regex insert: { \"find_pattern\": \"<regex, MULTILINE>\", \"insert_after\": \"<text to insert after the single match>\" }",
+      "_hints_note": "ANTI-BIAS RULE (see suites/README.md 'Detection hints: use SYMBOLS, not adjectives'): hints must be code symbols / literal tokens from the diff (identifiers, operators, fn names: owner_id, invalidateQueries, !==, removeEventListener, limit), NOT descriptive adjectives ('dangerous', 'incorrect', 'subtle'). A correct finding must be FORCED to cite these regardless of which model wrote it. Aim for >=2 symbols a real finding cannot avoid; if you can't write them, the bug is too subjective -- redesign it.",
+      "detection_hints": {
+        "must_mention_any": [
+          "<changed_identifier_e.g._owner_id>",
+          "<literal_operator_or_value_e.g._!==_or_limit>",
+          "<fn_or_symbol_a_correct_finding_must_cite>"
+        ]
+      }
+    }
+  ]
+}

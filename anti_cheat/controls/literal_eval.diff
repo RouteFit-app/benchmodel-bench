@@ -1,0 +1,9 @@
+diff --git a/app/params.py b/app/params.py
+--- a/app/params.py
++++ b/app/params.py
+@@ -1,7 +1,8 @@ import ast
+ def parse_literal(raw: str):
+     """Turn a request param like '[1, 2, 3]' or "{'a': 1}" into a Python value."""
+-    return json.loads(raw)
++    # allow python-literal syntax (tuples, single quotes), not just strict JSON
++    return ast.literal_eval(raw)

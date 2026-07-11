@@ -1,0 +1,49 @@
+{
+  "benchmark_name": "Gogs Real Regressions",
+  "version": 1,
+  "repo": "https://github.com/gogs/gogs",
+  "base_branch": "main",
+  "buggy_branch": "benchmark/real-regression",
+  "created_at": "2026-06-25",
+  "tech_stack": "Go",
+  "provenance": "real-regression",
+  "note": "Reverses the fix for CVE-2025-64175 (High), the 2FA bypass via recovery code in Gogs, discovered by OpenAI using GPT-5. The recovery-code lookup is supposed to be scoped to the authenticating user; the regression drops the `user_id = ?` constraint so any unused recovery code (e.g. the attacker's own) clears any victim's 2FA given valid credentials. This is the GTIG 'hardcoded trust assumption' class: the function still accepts a userID but no longer uses it to scope the query, so a competent reviewer must connect a dropped WHERE constraint to a cross-account 2FA bypass / account takeover.",
+  "file_locations": {
+    "two_factors.go": "internal/database/two_factors.go"
+  },
+  "scoring": {
+    "detect_points": 10,
+    "correct_file_bonus": 3,
+    "correct_severity_bonus": 2,
+    "false_positive_penalty": -2,
+    "severity_weight": { "high": 1.5, "medium": 1.0, "low": 0.5 }
+  },
+  "bugs": [
+    {
+      "id": "BUG_001",
+      "file": "two_factors.go",
+      "function": "TwoFactorsStore.UseRecoveryCode",
+      "category": "broken_authentication_2fa_bypass",
+      "owasp": "A01: Broken Access Control (CWE-639 Authorization Bypass Through User-Controlled Key / 2FA bypass)",
+      "severity": "high",
+      "severity_note": "CVE-2025-64175 is rated High; it enables full account takeover by defeating 2FA. Mapped to the board's 'high', not inflated.",
+      "security_relevant": true,
+      "difficulty": "hard",
+      "provenance": "real-regression",
+      "cve": "CVE-2025-64175",
+      "fixed_by": "https://github.com/gogs/gogs/security/advisories/GHSA-p6x6-9mx6-26wj (CVE-2025-64175, fixed in Gogs 0.13.4; discovered by OpenAI Security Research using GPT-5)",
+      "description": "Reverts the fix for CVE-2025-64175. UseRecoveryCode validates a 2FA recovery code and marks it used; the fix scopes the lookup to the authenticating user with `tx.Where(\"user_id = ? AND code = ? AND is_used = ?\", userID, code, false)`. The regression removes the `user_id = ?` clause, leaving `tx.Where(\"code = ? AND is_used = ?\", code, false)`, a global lookup for any unused recovery code. Because the function still receives userID but no longer uses it to constrain the query, an attacker who knows a victim's username and password can submit one of their OWN unused recovery codes during the victim's login and clear the victim's 2FA, a cross-account bypass and full account takeover. The reviewer must recognize that dropping the user scope from the recovery-code query turns a per-user check into a global one, defeating 2FA for every account. Flagging it as a generic 'query change' or 'missing filter' without naming the 2FA/auth-bypass impact is a partial catch; the tell is that userID is accepted but never used to scope the lookup.",
+      "detection_hints": {
+        "must_mention_any": [
+          "2FA", "two-factor", "two factor", "recovery code", "user_id", "userID", "scope",
+          "scoped", "cross-account", "authorization", "auth bypass", "account takeover",
+          "any user", "missing user", "IDOR", "broken access", "user-controlled"
+        ]
+      },
+      "injection": {
+        "find": "\t\terr := tx.Where(\"user_id = ? AND code = ? AND is_used = ?\", userID, code, false).First(&recoveryCode).Error",
+        "replace_with": "\t\terr := tx.Where(\"code = ? AND is_used = ?\", code, false).First(&recoveryCode).Error"
+      }
+    }
+  ]
+}

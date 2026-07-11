@@ -1,0 +1,204 @@
+{
+  "benchmark_name": "Node/Express (RealWorld)",
+  "version": 2,
+  "repo": "https://github.com/gothinkster/node-express-realworld-example-app",
+  "base_branch": "master",
+  "buggy_branch": "benchmark/node-express-v2",
+  "created_at": "2026-06-23",
+  "tech_stack": "Node.js / Express",
+  "file_locations": {
+    "auth.ts": "src/app/routes/auth/auth.ts",
+    "token.utils.ts": "src/app/routes/auth/token.utils.ts",
+    "auth.service.ts": "src/app/routes/auth/auth.service.ts",
+    "article.service.ts": "src/app/routes/article/article.service.ts",
+    "auth.controller.ts": "src/app/routes/auth/auth.controller.ts",
+    "profile.service.ts": "src/app/routes/profile/profile.service.ts"
+  },
+  "scoring": {
+    "detect_points": 10,
+    "correct_file_bonus": 3,
+    "correct_severity_bonus": 2,
+    "false_positive_penalty": -2,
+    "severity_weight": {
+      "high": 1.5,
+      "medium": 1.0,
+      "low": 0.5
+    }
+  },
+  "bugs": [
+    {
+      "id": "BUG_001",
+      "file": "auth.controller.ts",
+      "function": "get current user route",
+      "category": "broken_access_control",
+      "owasp": "A01: Broken Access Control",
+      "severity": "high",
+      "security_relevant": true,
+      "difficulty": "hard",
+      "description": "The GET /user handler now derives the account id from a client-supplied query parameter before falling back to the authenticated session: `getCurrentUser(Number(req.query.id) || req.auth?.user?.id)`. Any logged-in user can request `/user?id=5` and receive another user's account, including their email and a freshly minted JWT for that user, a full account takeover. Looks like a harmless override but it turns the current-user endpoint into an IDOR.",
+      "detection_hints": {
+        "must_mention_any": [
+          "req.query.id",
+          "query parameter",
+          "IDOR",
+          "getCurrentUser",
+          "another user",
+          "account takeover",
+          "req.auth",
+          "object reference",
+          "id override",
+          "access control"
+        ]
+      },
+      "injection": {
+        "find": "    const user = await getCurrentUser(req.auth?.user?.id);",
+        "replace_with": "    const user = await getCurrentUser(Number(req.query.id) || req.auth?.user?.id);"
+      }
+    },
+    {
+      "id": "BUG_002",
+      "file": "auth.service.ts",
+      "function": "updateUser",
+      "category": "mass_assignment",
+      "owasp": "A08: Software and Data Integrity Failures",
+      "severity": "high",
+      "security_relevant": true,
+      "difficulty": "hard",
+      "description": "updateUser's Prisma `data` was changed from an explicit allow-list of fields to a spread of the raw request body: `data: { ...userPayload, ...(password ? { password: hashedPassword } : {}) }`. The client now controls every column of the update. Because the route reads `req.body.user` verbatim, an attacker can set fields the API never intended to be writable (for example `demo`, or any future privilege/role column), and the original per-field whitelist that protected integrity is gone. Mass assignment.",
+      "detection_hints": {
+        "must_mention_any": [
+          "mass assignment",
+          "userPayload",
+          "spread",
+          "allow-list",
+          "whitelist",
+          "arbitrary fields",
+          "req.body",
+          "updateUser",
+          "over-posting",
+          "integrity"
+        ]
+      },
+      "injection": {
+        "find": "    data: {\n      ...(email ? { email } : {}),\n      ...(username ? { username } : {}),\n      ...(password ? { password: hashedPassword } : {}),\n      ...(image ? { image } : {}),\n      ...(bio ? { bio } : {}),\n    },",
+        "replace_with": "    data: {\n      ...userPayload,\n      ...(password ? { password: hashedPassword } : {}),\n    },"
+      }
+    },
+    {
+      "id": "BUG_003",
+      "file": "article.service.ts",
+      "function": "updateArticle",
+      "category": "broken_access_control",
+      "owasp": "A01: Broken Access Control",
+      "severity": "high",
+      "security_relevant": true,
+      "difficulty": "hard",
+      "description": "The ownership guard in updateArticle was removed. `if (existingArticle.author.id !== id) { throw new HttpException(403, ...) }` is gone, so any authenticated user can edit any article by slug, overwriting another author's title, body and tags. The function still fetches `existingArticle` and checks for 404, which makes the missing authorization easy to overlook in a large Prisma-heavy function. Broken object-level authorization.",
+      "detection_hints": {
+        "must_mention_any": [
+          "updateArticle",
+          "ownership",
+          "owner",
+          "author.id",
+          "authorized",
+          "IDOR",
+          "object-level",
+          "access control",
+          "authorization",
+          "any user can"
+        ]
+      },
+      "injection": {
+        "find": "  if (existingArticle.author.id !== id) {\n    throw new HttpException(403, {\n      message: 'You are not authorized to update this article',\n    });\n  }\n\n  if (article.title) {",
+        "replace_with": "  if (article.title) {"
+      }
+    },
+    {
+      "id": "BUG_004",
+      "file": "auth.ts",
+      "function": "getTokenFromHeaders",
+      "category": "sensitive_data_exposure",
+      "owasp": "A07: Identification and Authentication Failures",
+      "severity": "medium",
+      "security_relevant": true,
+      "difficulty": "hard",
+      "description": "getTokenFromHeaders now also accepts the JWT from a `?token=` query-string parameter as a fallback. Bearer tokens passed in URLs leak into web-server access logs, proxy logs, browser history and the Referer header sent to third-party sites, so a credential that should only live in an Authorization header is now exposed in places that are widely logged and retained. The header path still works, so the change is easy to miss. Credential exposure via URL.",
+      "detection_hints": {
+        "must_mention_any": [
+          "req.query.token",
+          "query string",
+          "query parameter",
+          "token in URL",
+          "Referer",
+          "logs",
+          "getTokenFromHeaders",
+          "leak",
+          "exposure",
+          "Authorization header"
+        ]
+      },
+      "injection": {
+        "find": "    return req.headers.authorization.split(' ')[1];\n  }\n  return null;\n};",
+        "replace_with": "    return req.headers.authorization.split(' ')[1];\n  }\n  if (req.query && req.query.token) {\n    return String(req.query.token);\n  }\n  return null;\n};"
+      }
+    },
+    {
+      "id": "BUG_005",
+      "file": "profile.service.ts",
+      "function": "getProfile",
+      "category": "sensitive_data_exposure",
+      "owasp": "A01: Broken Access Control",
+      "severity": "medium",
+      "security_relevant": true,
+      "difficulty": "hard",
+      "description": "getProfile now spreads the target user's `email` into the response: `return { ...profileMapper(profile, id), email: profile.email }`. GET /profiles/:username is auth-optional and public, so this leaks the email address of any user to anyone who knows (or enumerates) a username. A single extra field on a public endpoint is easy to overlook in review but turns the public profile into a PII disclosure.",
+      "detection_hints": {
+        "must_mention_any": [
+          "email",
+          "profile.email",
+          "profileMapper",
+          "public",
+          "PII",
+          "exposure",
+          "leak",
+          "getProfile",
+          "sensitive",
+          "enumerat"
+        ]
+      },
+      "injection": {
+        "find": "  if (!profile) {\n    throw new HttpException(404, {});\n  }\n\n  return profileMapper(profile, id);",
+        "replace_with": "  if (!profile) {\n    throw new HttpException(404, {});\n  }\n\n  return { ...profileMapper(profile, id), email: profile.email };"
+      }
+    },
+    {
+      "id": "BUG_006",
+      "file": "token.utils.ts",
+      "function": "generateToken",
+      "category": "broken_authentication",
+      "owasp": "A07: Identification and Authentication Failures",
+      "severity": "medium",
+      "security_relevant": true,
+      "difficulty": "hard",
+      "description": "generateToken dropped the `expiresIn: '60d'` option, so issued JWTs now have no expiry and are valid forever. A leaked or stolen token can never age out and there is no server-side session to revoke, so a single intercepted token is a permanent credential. Removing token expiry is a quiet one-line change that is easy to miss but materially weakens the auth model.",
+      "detection_hints": {
+        "must_mention_any": [
+          "expiresIn",
+          "expiry",
+          "expiration",
+          "never expire",
+          "no expiry",
+          "token lifetime",
+          "revoke",
+          "generateToken",
+          "long-lived",
+          "JWT"
+        ]
+      },
+      "injection": {
+        "find": "  jwt.sign({ user: { id } }, process.env.JWT_SECRET || 'superSecret', {\n    expiresIn: '60d',\n  });",
+        "replace_with": "  jwt.sign({ user: { id } }, process.env.JWT_SECRET || 'superSecret');"
+      }
+    }
+  ]
+}

@@ -1,0 +1,131 @@
+{
+  "benchmark_name": "Spring PetClinic Regressions",
+  "version": 1,
+  "repo": "https://github.com/spring-projects/spring-petclinic",
+  "base_branch": "main",
+  "buggy_branch": "benchmark/real-regressions",
+  "created_at": "2026-06-20",
+  "tech_stack": "Java / Spring Boot",
+  "note": "REAL regressions: each bug is a maintainer fix from petclinic git history, reverted back in. Zero-provenance \u2014 no bug was authored for this benchmark.",
+  "file_locations": {
+    "PetController.java": "src/main/java/org/springframework/samples/petclinic/owner/PetController.java",
+    "OwnerController.java": "src/main/java/org/springframework/samples/petclinic/owner/OwnerController.java"
+  },
+  "scoring": {
+    "detect_points": 10,
+    "correct_file_bonus": 3,
+    "correct_severity_bonus": 2,
+    "false_positive_penalty": -2,
+    "severity_weight": {
+      "high": 1.5,
+      "medium": 1.0,
+      "low": 0.5
+    }
+  },
+  "bugs": [
+    {
+      "id": "BUG_001",
+      "file": "PetController.java",
+      "function": "processUpdateForm",
+      "category": "incorrect_comparison",
+      "severity": "medium",
+      "security_relevant": false,
+      "difficulty": "hard",
+      "provenance": {
+        "commit": "fdc40a7",
+        "date": "2024-11-05",
+        "message": "use equals instead of == to compare Integer",
+        "commit_url": "https://github.com/spring-projects/spring-petclinic/commit/fdc40a7"
+      },
+      "description": "Real regression reverted from petclinic commit fdc40a7. Compares two Integer object ids with != instead of Objects.equals \u2014 a reference comparison that breaks for ids outside the JVM Integer cache (-128..127), so the duplicate-pet-name check silently fails for large ids.",
+      "detection_hints": {
+        "must_mention_any": [
+          "Integer",
+          "==",
+          "!=",
+          "equals",
+          "Objects.equals",
+          "reference",
+          "identity",
+          "autobox",
+          "getId",
+          "cache",
+          "value"
+        ]
+      },
+      "injection": {
+        "find": "!Objects.equals(existingPet.getId(), pet.getId())",
+        "replace_with": "existingPet.getId() != pet.getId()"
+      }
+    },
+    {
+      "id": "BUG_002",
+      "file": "PetController.java",
+      "function": "processUpdateForm",
+      "category": "data_integrity",
+      "severity": "medium",
+      "security_relevant": false,
+      "difficulty": "medium",
+      "provenance": {
+        "commit": "2aa53f9",
+        "date": "2025-01-01",
+        "message": "Fix pet update (Fixes #1752): modify existing pet instead of adding new one",
+        "commit_url": "https://github.com/spring-projects/spring-petclinic/commit/2aa53f9"
+      },
+      "description": "Real regression reverted from petclinic commit 2aa53f9 (Fixes #1752). On editing a pet, calls owner.addPet(pet) instead of updating the existing pet, so an edit creates a duplicate pet rather than persisting the change. [severity recalibrated high->medium: 3/4 reviewers independently rated it medium; no data loss or security impact.]",
+      "detection_hints": {
+        "must_mention_any": [
+          "addPet",
+          "update",
+          "existing pet",
+          "duplicate",
+          "persist",
+          "edit",
+          "new pet",
+          "processUpdateForm",
+          "save",
+          "modify"
+        ]
+      },
+      "injection": {
+        "find": "updatePetDetails(owner, pet);",
+        "replace_with": "owner.addPet(pet);\n\t\tthis.owners.save(owner);"
+      }
+    },
+    {
+      "id": "BUG_003",
+      "file": "OwnerController.java",
+      "function": "processUpdateOwnerForm",
+      "category": "broken_access_control",
+      "severity": "medium",
+      "security_relevant": true,
+      "difficulty": "hard",
+      "provenance": {
+        "commit": "14af47d",
+        "date": "2024-11-06",
+        "message": "add check to avoid owner-from-form / ownerId-from-url mismatch",
+        "commit_url": "https://github.com/spring-projects/spring-petclinic/commit/14af47d"
+      },
+      "description": "Real regression reverted from petclinic commit 14af47d. Removes the guard that rejects an update when the owner id submitted in the form does not match the ownerId in the URL, letting a mismatched-id submission proceed instead of being rejected.",
+      "detection_hints": {
+        "must_mention_any": [
+          "ownerId",
+          "getId",
+          "mismatch",
+          "URL",
+          "form",
+          "validation",
+          "does not match",
+          "tamper",
+          "reject",
+          "guard",
+          "check"
+        ]
+      },
+      "injection": {
+        "find": "\t\tif (!Objects.equals(owner.getId(), ownerId)) {\n\t\t\tresult.rejectValue(\"id\", \"mismatch\", \"The owner ID in the form does not match the URL.\");\n\t\t\tredirectAttributes.addFlashAttribute(\"error\", \"Owner ID mismatch. Please try again.\");\n\t\t\treturn \"redirect:/owners/{ownerId}/edit\";\n\t\t}\n\n",
+        "replace_with": ""
+      }
+    }
+  ]
+}

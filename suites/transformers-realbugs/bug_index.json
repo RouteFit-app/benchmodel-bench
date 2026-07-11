@@ -1,0 +1,49 @@
+{
+  "benchmark_name": "Transformers Real Regressions",
+  "version": 1,
+  "repo": "https://github.com/huggingface/transformers",
+  "base_branch": "main",
+  "buggy_branch": "benchmark/real-regression",
+  "created_at": "2026-06-25",
+  "tech_stack": "AI Frameworks",
+  "provenance": "real-regression",
+  "note": "Reverses the fix for CVE-2026-4372, the critical unauthenticated RCE in Hugging Face Transformers (config injection via from_pretrained, no trust_remote_code needed). Transformers is the most-used AI/ML library (2.2B+ installs), so this tests whether a reviewer catches the real, recent critical CVE in the library people build AI on. Single-bug suite for now; expandable with the kernel-loading gate (the second half of PR #44395).",
+  "file_locations": {
+    "configuration_utils.py": "src/transformers/configuration_utils.py"
+  },
+  "scoring": {
+    "detect_points": 10,
+    "correct_file_bonus": 3,
+    "correct_severity_bonus": 2,
+    "false_positive_penalty": -2,
+    "severity_weight": { "high": 1.5, "medium": 1.0, "low": 0.5 }
+  },
+  "bugs": [
+    {
+      "id": "BUG_001",
+      "file": "configuration_utils.py",
+      "function": "PretrainedConfig.__init__",
+      "category": "code_injection_rce",
+      "owasp": "A08: Software and Data Integrity Failures",
+      "severity": "high",
+      "severity_note": "The advisory rates CVE-2026-4372 CRITICAL; our scale tops out at 'high', so this is weighted at the ceiling (high), not inflated. A critical-tier would rank it higher if/when the scale adds one.",
+      "security_relevant": true,
+      "difficulty": "hard",
+      "provenance": "real-regression",
+      "cve": "CVE-2026-4372",
+      "fixed_by": "https://github.com/huggingface/transformers/pull/44395 (CVE-2026-4372, fixed in v5.3.0)",
+      "description": "Reverts the fix for CVE-2026-4372, the critical unauthenticated RCE. In PretrainedConfig.__init__, leftover kwargs from an untrusted model config.json are applied to the object with a generic setattr in a loop. The fix added a denylist (`if key not in (\"_attn_implementation_internal\", \"_experts_implementation_internal\")`) so these private internal attributes can NOT be set from config, because `_attn_implementation_internal` flows into importlib.import_module() and loads/executes arbitrary Python from the Hub during from_pretrained(), with no trust_remote_code=True required. Reverting drops the denylist, so a poisoned config.json sets the dangerous internal attribute again and reintroduces the unauthenticated RCE. The reviewer must recognize that setattr-ing arbitrary keys from an untrusted config onto internal/private attributes is a code-execution sink, not a benign deserialization.",
+      "detection_hints": {
+        "must_mention_any": [
+          "setattr", "_attn_implementation_internal", "config injection", "RCE",
+          "remote code execution", "denylist", "untrusted", "import_module",
+          "from_pretrained", "arbitrary", "private attribute", "trust_remote_code", "config.json"
+        ]
+      },
+      "injection": {
+        "find": "        # Additional attributes without default values\n        for key, value in kwargs.items():\n            # Check this to avoid deserializing problematic fields from hub configs - they should use the public field\n            if key not in (\"_attn_implementation_internal\", \"_experts_implementation_internal\"):\n                try:\n                    setattr(self, key, value)\n                except AttributeError as err:\n                    logger.error(f\"Can't set {key} with value {value} for {self}\")\n                    raise err",
+        "replace_with": "        # Additional attributes without default values\n        for key, value in kwargs.items():\n            try:\n                setattr(self, key, value)\n            except AttributeError as err:\n                logger.error(f\"Can't set {key} with value {value} for {self}\")\n                raise err"
+      }
+    }
+  ]
+}

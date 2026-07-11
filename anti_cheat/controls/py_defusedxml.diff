@@ -1,0 +1,10 @@
+diff --git a/app/feed.py b/app/feed.py
+--- a/app/feed.py
++++ b/app/feed.py
+@@ -1,8 +1,8 @@
+-import xml.etree.ElementTree as ET
++import defusedxml.ElementTree as ET
+
+ def parse_feed(raw: bytes):
+     """Parse an untrusted XML feed body into an element tree."""
+     return ET.fromstring(raw)

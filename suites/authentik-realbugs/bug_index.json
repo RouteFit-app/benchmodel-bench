@@ -1,0 +1,49 @@
+{
+  "benchmark_name": "authentik Real Regressions",
+  "version": 1,
+  "repo": "https://github.com/goauthentik/authentik",
+  "base_branch": "main",
+  "buggy_branch": "benchmark/real-regression",
+  "created_at": "2026-06-25",
+  "tech_stack": "Python / Django",
+  "provenance": "real-regression",
+  "note": "Reverses the fix for CVE-2025-53942 (authentik OAuth/SAML deactivated-user bypass). The user-login stage already checked `if not user.is_active` and logged a warning ('User is not active, login will not work.'), but before the fix it did NOT stop the login; the fix added `return self.executor.stage_invalid()`. This suite deletes that return, leaving a guard that warns but doesn't enforce, so deactivated users complete login and can authorize applications. The GTIG 'hardcoded trust assumption' class in its purest form: the check looks present (and even logs that login won't work) but is a no-op.",
+  "file_locations": {
+    "stage.py": "authentik/stages/user_login/stage.py"
+  },
+  "scoring": {
+    "detect_points": 10,
+    "correct_file_bonus": 3,
+    "correct_severity_bonus": 2,
+    "false_positive_penalty": -2,
+    "severity_weight": { "high": 1.5, "medium": 1.0, "low": 0.5 }
+  },
+  "bugs": [
+    {
+      "id": "BUG_001",
+      "file": "stage.py",
+      "function": "UserLoginStageView.do_login",
+      "category": "broken_authentication_inactive_user",
+      "owasp": "A07: Identification and Authentication Failures (CWE-285 Improper Authorization / deactivated account)",
+      "severity": "medium",
+      "severity_note": "GHSA-9g4j-v8w5-7x42 (CVE-2025-53942) is a half-authenticated bypass: deactivated accounts can authorize OAuth/SAML apps but cannot reach the API. Mapped to the board's medium, not inflated; a reviewer rating it high is not penalized harshly given the auth impact.",
+      "security_relevant": true,
+      "difficulty": "hard",
+      "provenance": "real-regression",
+      "cve": "CVE-2025-53942",
+      "fixed_by": "https://github.com/goauthentik/authentik/commit/ce3f9e3763c1778bf3a16b98c95d10f4091436ab (CVE-2025-53942 / GHSA-9g4j-v8w5-7x42, PR #15719, fixed in authentik 2025.4.4 / 2025.6.4)",
+      "description": "Reverts the fix for CVE-2025-53942. In the user-login stage's do_login, the code reads the pending user and checks `if not user.is_active`, logging a warning that 'login will not work.' The fix made that check enforce by adding `return self.executor.stage_invalid()`; the regression deletes that return. The result is a guard that detects the inactive account and even logs that login should fail, but then falls through and logs the user in anyway, so a deactivated user (e.g. one enrolled or connected via an OAuth/SAML source) reaches a half-authenticated state and can authorize applications. The reviewer must notice that the `if not user.is_active` branch no longer returns / blocks, so the warning is toothless and the deactivated-account check does nothing. Reading the line ('there is an is_active check, looks fine') is not enough; the catch is recognizing the check no longer enforces. Flagging only that 'the warning is misleading' without the auth-bypass impact is a partial catch.",
+      "detection_hints": {
+        "must_mention_any": [
+          "is_active", "inactive", "deactivated", "disabled account", "return", "stage_invalid",
+          "still log in", "not enforced", "no-op", "does not block", "falls through",
+          "authentication bypass", "auth bypass", "account active", "login"
+        ]
+      },
+      "injection": {
+        "find": "        if not user.is_active:\n            self.logger.warning(\"User is not active, login will not work.\")\n            return self.executor.stage_invalid()",
+        "replace_with": "        if not user.is_active:\n            self.logger.warning(\"User is not active, login will not work.\")"
+      }
+    }
+  ]
+}

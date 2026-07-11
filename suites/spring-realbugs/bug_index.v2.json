@@ -1,0 +1,126 @@
+{
+  "benchmark_name": "Spring PetClinic Regressions",
+  "version": 2,
+  "repo": "https://github.com/spring-projects/spring-petclinic",
+  "base_branch": "main",
+  "buggy_branch": "benchmark/real-regressions-v2",
+  "created_at": "2026-06-21",
+  "note": "REAL regressions (v2): maintainer fixes from petclinic history, reverted back in.",
+  "file_locations": {
+    "Person.java": "src/main/java/org/springframework/samples/petclinic/model/Person.java",
+    "VisitController.java": "src/main/java/org/springframework/samples/petclinic/owner/VisitController.java",
+    "Visit.java": "src/main/java/org/springframework/samples/petclinic/owner/Visit.java"
+  },
+  "scoring": {
+    "detect_points": 10,
+    "correct_file_bonus": 3,
+    "correct_severity_bonus": 2,
+    "false_positive_penalty": -2,
+    "severity_weight": {
+      "high": 1.5,
+      "medium": 1.0,
+      "low": 0.5
+    }
+  },
+  "bugs": [
+    {
+      "id": "BUG_001",
+      "file": "Person.java",
+      "function": "Person",
+      "category": "missing_validation",
+      "severity": "medium",
+      "security_relevant": false,
+      "difficulty": "medium",
+      "provenance": {
+        "commit": "3c06fbf",
+        "date": "2026-04-13",
+        "message": "add @Size validation on Person firstName and lastName",
+        "commit_url": "https://github.com/spring-projects/spring-petclinic/commit/3c06fbf"
+      },
+      "description": "Real regression reverted from petclinic commit 3c06fbf. Removes the @Size(max=30) (and column length cap) on Person.firstName and lastName, so the API again accepts unbounded name strings with no length validation.",
+      "detection_hints": {
+        "must_mention_any": [
+          "@Size",
+          "length",
+          "firstName",
+          "lastName",
+          "validation",
+          "max",
+          "unbounded",
+          "@Column",
+          "30",
+          "bound"
+        ]
+      },
+      "injection": {
+        "find": "\t@Column(length = 30)\n\t@Size(max = 30)\n\t@NotBlank\n\tprivate String firstName;\n\n\t@Column(length = 30)\n\t@Size(max = 30)\n\t@NotBlank\n\tprivate String lastName;",
+        "replace_with": "\t@Column\n\t@NotBlank\n\tprivate String firstName;\n\n\t@Column\n\t@NotBlank\n\tprivate String lastName;"
+      }
+    },
+    {
+      "id": "BUG_002",
+      "file": "VisitController.java",
+      "function": "processNewVisitForm",
+      "category": "missing_validation",
+      "severity": "medium",
+      "security_relevant": false,
+      "difficulty": "medium",
+      "provenance": {
+        "commit": "753d35c",
+        "date": "2026-06-01",
+        "message": "Validate future visit dates",
+        "commit_url": "https://github.com/spring-projects/spring-petclinic/commit/753d35c"
+      },
+      "description": "Real regression reverted from petclinic commit 753d35c. Removes the guard rejecting a visit whose date is not in the future, so a visit can again be booked in the past.",
+      "detection_hints": {
+        "must_mention_any": [
+          "isAfter",
+          "getDate",
+          "future",
+          "past",
+          "visit",
+          "date",
+          "validation",
+          "rejectValue",
+          "LocalDate"
+        ]
+      },
+      "injection": {
+        "find": "\t\tif (visit.getDate() != null && !visit.getDate().isAfter(LocalDate.now())) {\n\t\t\tresult.rejectValue(\"date\", \"typeMismatch.visitDate\");\n\t\t}\n",
+        "replace_with": ""
+      }
+    },
+    {
+      "id": "BUG_003",
+      "file": "Visit.java",
+      "function": "Visit",
+      "category": "inconsistent_default",
+      "severity": "low",
+      "security_relevant": false,
+      "difficulty": "hard",
+      "provenance": {
+        "commit": "753d35c",
+        "date": "2026-06-01",
+        "message": "default a new visit to tomorrow (future), matching the validation rule",
+        "commit_url": "https://github.com/spring-projects/spring-petclinic/commit/753d35c"
+      },
+      "description": "Real regression reverted from petclinic commit 753d35c. The default date for a new Visit reverts from tomorrow to today; combined with the future-only rule, a freshly created visit's own default date would no longer satisfy validation. The subtle half of the same feature revert.",
+      "detection_hints": {
+        "must_mention_any": [
+          "plusDays",
+          "LocalDate.now",
+          "default",
+          "tomorrow",
+          "today",
+          "visit",
+          "future",
+          "date"
+        ]
+      },
+      "injection": {
+        "find": "this.date = LocalDate.now().plusDays(1);",
+        "replace_with": "this.date = LocalDate.now();"
+      }
+    }
+  ]
+}

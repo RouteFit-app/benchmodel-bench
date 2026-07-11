@@ -1,0 +1,235 @@
+{
+  "benchmark_name": "React Frontend Bug Injection",
+  "version": 2,
+  "repo": "https://github.com/RouteFit-app/benchmodel-fastapi-template",
+  "base_branch": "master",
+  "buggy_branch": "benchmark/buggy-react-v2",
+  "created_at": "2026-06-19",
+  "tech_stack": "React / Frontend",
+  "_tech_stack_note": "Runs are tagged with the BenchModel PROJECT's tech_stack, not this field. Use the same React / Frontend benchmark project; this key is documentation only.",
+  "_v2_note": "v1 saturated (all reviewers 10/10). v2 swaps line-local antipatterns for bugs where each changed line reads as correct and only breaks under cross-render / cache-matching / cleanup / null-vs-undefined reasoning. Intentionally hard-to-detect.",
+  "file_locations": {
+    "AddItem.tsx": "frontend/src/components/Items/AddItem.tsx",
+    "EditItem.tsx": "frontend/src/components/Items/EditItem.tsx",
+    "EditUser.tsx": "frontend/src/components/Admin/EditUser.tsx",
+    "UserInformation.tsx": "frontend/src/components/UserSettings/UserInformation.tsx",
+    "DataTable.tsx": "frontend/src/components/Common/DataTable.tsx",
+    "theme-provider.tsx": "frontend/src/components/theme-provider.tsx",
+    "useAuth.ts": "frontend/src/hooks/useAuth.ts",
+    "useMobile.ts": "frontend/src/hooks/useMobile.ts"
+  },
+  "scoring": {
+    "detect_points": 10,
+    "correct_file_bonus": 3,
+    "correct_severity_bonus": 2,
+    "false_positive_penalty": -2,
+    "severity_weight": {
+      "high": 1.5,
+      "medium": 1.0,
+      "low": 0.5
+    }
+  },
+  "bugs": [
+    {
+      "id": "BUG_001",
+      "file": "useAuth.ts",
+      "function": "isLoggedIn",
+      "category": "broken_auth",
+      "severity": "high",
+      "difficulty": "hard",
+      "security_relevant": true,
+      "description": "isLoggedIn compares localStorage.getItem(...) against undefined instead of null. getItem returns null (never undefined) when the key is absent, so `null !== undefined` is always true and isLoggedIn() returns true even when no token is stored. Every client-side auth gate that calls it now treats anonymous visitors as logged in. The line looks like a normal presence check; the bug is the null-vs-undefined distinction.",
+      "injection": {
+        "find": "  return localStorage.getItem(\"access_token\") !== null",
+        "replace_with": "  return localStorage.getItem(\"access_token\") !== undefined"
+      },
+      "detection_hints": {
+        "must_mention_any": [
+          "isLoggedIn",
+          "null",
+          "undefined",
+          "getItem",
+          "access_token",
+          "localStorage",
+          "always true"
+        ]
+      }
+    },
+    {
+      "id": "BUG_002",
+      "file": "EditItem.tsx",
+      "function": "EditItem mutation onSettled",
+      "category": "stale_cache",
+      "severity": "medium",
+      "difficulty": "hard",
+      "security_relevant": false,
+      "description": "After editing an item the invalidation key was narrowed from [\"items\"] to [\"items\", item.id]. React Query invalidates queries whose key STARTS WITH the given key, and the list query is keyed exactly [\"items\"] -- which is not a descendant of [\"items\", item.id] -- so the list is never invalidated and the edited row keeps showing stale data. The more-specific key looks more correct, which is why it's easy to miss.",
+      "injection": {
+        "find": "      queryClient.invalidateQueries({ queryKey: [\"items\"] })",
+        "replace_with": "      queryClient.invalidateQueries({ queryKey: [\"items\", item.id] })"
+      },
+      "detection_hints": {
+        "must_mention_any": [
+          "invalidateQueries",
+          "queryKey",
+          "item.id",
+          "too specific",
+          "prefix",
+          "partial match",
+          "stale",
+          "items"
+        ]
+      }
+    },
+    {
+      "id": "BUG_003",
+      "file": "UserInformation.tsx",
+      "function": "UserInformation onSubmit",
+      "category": "inverted_logic",
+      "severity": "high",
+      "difficulty": "hard",
+      "security_relevant": false,
+      "description": "The 'only send changed fields' guard for full_name was inverted (!== became ===). full_name is now added to the update payload only when it did NOT change, so an actual edit to the name is silently dropped and never persisted while unchanged values are sent redundantly. The line reads like a normal equality check.",
+      "injection": {
+        "find": "    if (data.full_name !== currentUser?.full_name) {",
+        "replace_with": "    if (data.full_name === currentUser?.full_name) {"
+      },
+      "detection_hints": {
+        "must_mention_any": [
+          "full_name",
+          "changed",
+          "===",
+          "!==",
+          "updateData",
+          "inverted",
+          "comparison"
+        ]
+      }
+    },
+    {
+      "id": "BUG_004",
+      "file": "useMobile.ts",
+      "function": "useIsMobile effect",
+      "category": "resource_leak",
+      "severity": "medium",
+      "difficulty": "hard",
+      "security_relevant": false,
+      "description": "The effect's cleanup (return () => mql.removeEventListener('change', onChange)) was removed. The matchMedia listener still works, so nothing looks broken in normal use, but every mount that isn't cleaned up leaks a listener bound to a stale onChange closure -- accumulating across remounts and firing setState on unmounted components.",
+      "injection": {
+        "find": "    mql.addEventListener(\"change\", onChange)\n    setIsMobile(window.innerWidth < MOBILE_BREAKPOINT)\n    return () => mql.removeEventListener(\"change\", onChange)",
+        "replace_with": "    mql.addEventListener(\"change\", onChange)\n    setIsMobile(window.innerWidth < MOBILE_BREAKPOINT)"
+      },
+      "detection_hints": {
+        "must_mention_any": [
+          "cleanup",
+          "removeEventListener",
+          "leak",
+          "useEffect",
+          "listener",
+          "return",
+          "unmount"
+        ]
+      }
+    },
+    {
+      "id": "BUG_005",
+      "file": "theme-provider.tsx",
+      "function": "ThemeProvider useEffect",
+      "category": "resource_leak",
+      "severity": "low",
+      "difficulty": "hard",
+      "security_relevant": false,
+      "description": "The cleanup that unsubscribes the prefers-color-scheme media-query listener was deleted from the theme effect. Because the effect re-runs on every theme change (theme is in its deps), a new 'change' listener is added each time with no corresponding removal, leaking handlers and eventually running stale handleChange closures.",
+      "injection": {
+        "find": "    mediaQuery.addEventListener(\"change\", handleChange)\n\n    return () => {\n      mediaQuery.removeEventListener(\"change\", handleChange)\n    }\n  }, [theme, updateTheme, getResolvedTheme])",
+        "replace_with": "    mediaQuery.addEventListener(\"change\", handleChange)\n  }, [theme, updateTheme, getResolvedTheme])"
+      },
+      "detection_hints": {
+        "must_mention_any": [
+          "cleanup",
+          "removeEventListener",
+          "leak",
+          "useEffect",
+          "mediaQuery",
+          "listener",
+          "unsubscribe"
+        ]
+      }
+    },
+    {
+      "id": "BUG_006",
+      "file": "DataTable.tsx",
+      "function": "DataTable pagination footer",
+      "category": "off_by_one",
+      "severity": "low",
+      "difficulty": "medium",
+      "security_relevant": false,
+      "description": "The Math.min(..., data.length) clamp on the 'to' value of the 'Showing X to Y' range was removed, leaving just (pageIndex + 1) * pageSize. On the last (partial) page this overshoots data.length -- e.g. 'Showing 21 to 30 of 23' -- because nothing caps it at the real row count.",
+      "injection": {
+        "find": "              {Math.min(\n                (table.getState().pagination.pageIndex + 1) *\n                  table.getState().pagination.pageSize,\n                data.length,\n              )}{\" \"}",
+        "replace_with": "              {(table.getState().pagination.pageIndex + 1) *\n                table.getState().pagination.pageSize}{\" \"}"
+      },
+      "detection_hints": {
+        "must_mention_any": [
+          "Math.min",
+          "data.length",
+          "clamp",
+          "last page",
+          "pageSize",
+          "overshoot",
+          "exceeds"
+        ]
+      }
+    },
+    {
+      "id": "BUG_007",
+      "file": "EditUser.tsx",
+      "function": "formSchema refine",
+      "category": "validation_logic",
+      "severity": "medium",
+      "difficulty": "hard",
+      "security_relevant": true,
+      "description": "The password-match refine changed from `!data.password || data.password === data.confirm_password` to `&&`. The intent is 'valid if no password was set, OR if it matches the confirmation'. With && it is valid only when there is no password AND it matches -- so the moment an admin types a new password the schema can never pass, blocking all password changes, while the original 'skip check when empty' path is broken too.",
+      "injection": {
+        "find": "  .refine((data) => !data.password || data.password === data.confirm_password, {",
+        "replace_with": "  .refine((data) => !data.password && data.password === data.confirm_password, {"
+      },
+      "detection_hints": {
+        "must_mention_any": [
+          "refine",
+          "password",
+          "confirm_password",
+          "&&",
+          "||",
+          "match",
+          "validation"
+        ]
+      }
+    },
+    {
+      "id": "BUG_008",
+      "file": "AddItem.tsx",
+      "function": "AddItem mutation onError",
+      "category": "error_handling",
+      "severity": "high",
+      "difficulty": "hard",
+      "security_relevant": false,
+      "description": "The error handler is bound to showSuccessToast instead of showErrorToast. handleError calls `this(message)`, so a failed create now pops a green 'Success!' toast containing the error text, and the user believes the item was created when it wasn't. Both toasts are destructured from the same hook, so the swap reads as plausible.",
+      "injection": {
+        "find": "    onError: handleError.bind(showErrorToast),",
+        "replace_with": "    onError: handleError.bind(showSuccessToast),"
+      },
+      "detection_hints": {
+        "must_mention_any": [
+          "onError",
+          "handleError",
+          "bind",
+          "showErrorToast",
+          "showSuccessToast",
+          "success",
+          "error toast"
+        ]
+      }
+    }
+  ]
+}

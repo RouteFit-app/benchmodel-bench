@@ -1,0 +1,179 @@
+{
+  "suite": "Anti-Cheat Negative Controls",
+  "version": 1,
+  "created_at": "2026-07-08",
+  "purpose": "Each case is SAFE code that visually resembles a famous vulnerability class. A model that reasons about the code says 'looks fine'. A model running on memorized CVE patterns raises the vulnerability anyway -- a false alarm. Counting false alarms measures recall-over-reasoning, the thing a CVE-based benchmark can't otherwise see.",
+  "scoring_note": "A finding counts as a FALSE ALARM only if it (a) is framed as an open problem (not an endorsement / 'this is now fixed' note) and (b) matches one of the case's trap_keywords. Lower false-alarm rate = more reasoning, less recall.",
+  "controls": [
+    {
+      "id": "yaml_safe_load",
+      "title": "YAML load of a user upload via safe_load",
+      "resembles": "YAML deserialization RCE (the yaml.load family, e.g. CWE-502)",
+      "language": "python",
+      "why_safe": "yaml.safe_load cannot construct arbitrary Python objects; it only builds standard scalars/collections, so there is no code-execution path.",
+      "diff_file": "controls/yaml_safe_load.diff",
+      "trap_class": "deserialization",
+      "trap_keywords": ["arbitrary code", "remote code execution", "insecure deserialization", "unsafe deserialization", "deserialization vulnerability", "execute arbitrary", "yaml.load is"]
+    },
+    {
+      "id": "literal_eval",
+      "title": "Parse a literal with ast.literal_eval",
+      "resembles": "eval() code injection / RCE (CWE-95)",
+      "language": "python",
+      "why_safe": "ast.literal_eval only evaluates Python literals (numbers, strings, tuples, lists, dicts); it never executes function calls or arbitrary expressions.",
+      "diff_file": "controls/literal_eval.diff",
+      "trap_class": "code_injection",
+      "trap_keywords": ["arbitrary code", "code injection", "remote code execution", "execute arbitrary", "dangerous use of eval", "eval() is"]
+    },
+    {
+      "id": "compare_digest",
+      "title": "Token check switched to hmac.compare_digest",
+      "resembles": "Timing-attack token comparison (CWE-208)",
+      "language": "python",
+      "why_safe": "hmac.compare_digest IS the constant-time comparison; this change removes the timing side channel rather than introducing one.",
+      "diff_file": "controls/compare_digest.diff",
+      "trap_class": "timing_attack",
+      "trap_keywords": ["timing attack", "timing side channel", "timing side-channel", "not constant time", "non-constant-time", "constant time comparison should"]
+    },
+    {
+      "id": "parameterized_sql",
+      "title": "Query switched to a bound parameter",
+      "resembles": "SQL injection from string-built queries (CWE-89)",
+      "language": "python",
+      "why_safe": "The value is passed as a bound parameter (%s + params tuple); the driver escapes it. The change removes the previous concatenation risk.",
+      "diff_file": "controls/parameterized_sql.diff",
+      "trap_class": "sql_injection",
+      "trap_keywords": ["sql injection", "injection vulnerability", "unsanitized", "string concatenation", "not parameterized", "concatenat"]
+    },
+    {
+      "id": "md5_cache_key",
+      "title": "MD5 used for a non-security cache key",
+      "resembles": "Weak-hash / broken-crypto finding (CWE-327)",
+      "language": "python",
+      "why_safe": "MD5 here is a cache filename, explicitly usedforsecurity=False. It is not a password hash, signature, or integrity control, so the 'MD5 is broken' finding does not apply.",
+      "diff_file": "controls/md5_cache_key.diff",
+      "trap_class": "weak_hash",
+      "trap_keywords": ["md5 is broken", "md5 is insecure", "insecure hash", "weak hash", "cryptographically broken", "collision attack", "use sha-256", "use sha256", "broken hash", "md5 should not"]
+    },
+    {
+      "id": "subprocess_list_args",
+      "title": "os.system replaced by subprocess with list args",
+      "resembles": "OS command injection (CWE-78)",
+      "language": "python",
+      "why_safe": "Arguments are passed as a list with shell=False, so a shell never interprets them; metacharacters in the paths are treated as literal arguments. The change removes the prior os.system risk.",
+      "diff_file": "controls/subprocess_list_args.diff",
+      "trap_class": "command_injection",
+      "trap_keywords": ["command injection", "shell injection", "arbitrary command", "shell=true", "os command injection"]
+    },
+    {
+      "id": "escape_html",
+      "title": "User input escaped before HTML output",
+      "resembles": "Reflected XSS (CWE-79)",
+      "language": "python",
+      "why_safe": "markupsafe.escape neutralizes HTML metacharacters in the untrusted value before it is placed in the response, so no script can be injected.",
+      "diff_file": "controls/escape_html.diff",
+      "trap_class": "xss",
+      "trap_keywords": ["xss", "cross-site scripting", "cross site scripting", "html injection", "unescaped user", "script injection"]
+    },
+    {
+      "id": "safe_path_join",
+      "title": "Filename reduced to basename with containment check",
+      "resembles": "Path traversal / directory traversal (CWE-22)",
+      "language": "python",
+      "why_safe": "The filename is collapsed with os.path.basename and the resolved path is verified to stay inside BASE_DIR before use, so '../' cannot escape the directory.",
+      "diff_file": "controls/safe_path_join.diff",
+      "trap_class": "path_traversal",
+      "trap_keywords": ["path traversal", "directory traversal", "arbitrary file", "local file inclusion", "escape the directory"]
+    },
+    {
+      "id": "js_parameterized_sql",
+      "title": "Node query switched to a bound parameter ($1)",
+      "resembles": "SQL injection from string-built queries (CWE-89)",
+      "language": "javascript",
+      "why_safe": "The value is passed as a positional parameter ($1 + params array); the pg driver escapes it. The change removes the previous interpolation.",
+      "diff_file": "controls/js_parameterized_sql.diff",
+      "trap_class": "sql_injection",
+      "trap_keywords": ["sql injection", "injection vulnerability", "string interpolation", "not parameterized", "unsanitized", "concatenat"]
+    },
+    {
+      "id": "js_textcontent_xss",
+      "title": "User text rendered with textContent",
+      "resembles": "DOM-based XSS via innerHTML (CWE-79)",
+      "language": "javascript",
+      "why_safe": "textContent assigns the value as literal text and never parses HTML, so markup in userName cannot become live DOM.",
+      "diff_file": "controls/js_textcontent_xss.diff",
+      "trap_class": "xss",
+      "trap_keywords": ["xss vulnerability", "cross-site scripting", "cross site scripting", "dom-based xss", "html injection", "script injection", "vulnerable to xss"]
+    },
+    {
+      "id": "js_jwt_alg_pinned",
+      "title": "jwt.verify with the algorithm pinned",
+      "resembles": "JWT algorithm confusion / 'none' algorithm (CWE-347)",
+      "language": "javascript",
+      "why_safe": "algorithms: ['HS256'] forces the verifier to reject any token whose header asks for a different or 'none' algorithm, closing the alg-confusion path.",
+      "diff_file": "controls/js_jwt_alg_pinned.diff",
+      "trap_class": "jwt_alg_confusion",
+      "trap_keywords": ["algorithm confusion", "alg confusion", "none algorithm", "'none' algorithm", "unverified algorithm", "key confusion", "accepts any algorithm"]
+    },
+    {
+      "id": "js_timingsafe_equal",
+      "title": "Token compare switched to crypto.timingSafeEqual",
+      "resembles": "Timing-attack token comparison (CWE-208)",
+      "language": "javascript",
+      "why_safe": "crypto.timingSafeEqual is the constant-time comparison; combined with the length pre-check it removes the timing side channel rather than adding one.",
+      "diff_file": "controls/js_timingsafe_equal.diff",
+      "trap_class": "timing_attack",
+      "trap_keywords": ["timing attack", "timing side channel", "timing side-channel", "not constant time", "non-constant-time", "early-exit comparison"]
+    },
+    {
+      "id": "java_prepared_statement",
+      "title": "Statement replaced by PreparedStatement",
+      "resembles": "SQL injection from concatenated queries (CWE-89)",
+      "language": "java",
+      "why_safe": "The id is bound with setLong on a parameterized query; the JDBC driver escapes it. The change removes the prior string concatenation.",
+      "diff_file": "controls/java_prepared_statement.diff",
+      "trap_class": "sql_injection",
+      "trap_keywords": ["sql injection", "injection vulnerability", "string concatenation", "not parameterized", "unsanitized", "concatenat"]
+    },
+    {
+      "id": "java_xxe_disabled",
+      "title": "XML parser with DOCTYPE/external entities disabled",
+      "resembles": "XML External Entity (XXE) injection (CWE-611)",
+      "language": "java",
+      "why_safe": "disallow-doctype-decl plus disabling external general/parameter entities means the parser rejects the DOCTYPE and entities an XXE payload relies on.",
+      "diff_file": "controls/java_xxe_disabled.diff",
+      "trap_class": "xxe",
+      "trap_keywords": ["xxe", "billion laughs", "entity expansion attack", "xml external entity injection", "vulnerable to external entity", "processes external entities"]
+    },
+    {
+      "id": "java_securerandom",
+      "title": "Session token source switched to SecureRandom",
+      "resembles": "Insecure randomness / predictable token (CWE-330)",
+      "language": "java",
+      "why_safe": "SecureRandom is a cryptographically strong PRNG; the tokens are no longer drawn from the predictable java.util.Random.",
+      "diff_file": "controls/java_securerandom.diff",
+      "trap_class": "insecure_random",
+      "trap_keywords": ["insecure random", "predictable token", "predictable value", "weak random", "not cryptographically secure", "insecurely generated", "uses java.util.random"]
+    },
+    {
+      "id": "go_exec_no_shell",
+      "title": "exec.Command with args, no shell",
+      "resembles": "OS command injection via shell (CWE-78)",
+      "language": "go",
+      "why_safe": "Passing the program and arguments as separate parameters (no sh -c) means Go execs the binary directly; metacharacters in the paths are literal arguments.",
+      "diff_file": "controls/go_exec_no_shell.diff",
+      "trap_class": "command_injection",
+      "trap_keywords": ["command injection", "shell injection", "arbitrary command", "os command injection", "shell metacharacter"]
+    },
+    {
+      "id": "py_defusedxml",
+      "title": "XML parsing switched to defusedxml",
+      "resembles": "XXE / entity-expansion in XML parsing (CWE-611)",
+      "language": "python",
+      "why_safe": "defusedxml refuses DOCTYPE, external entities, and entity expansion by default, so the same fromstring call is no longer XXE- or billion-laughs-exploitable.",
+      "diff_file": "controls/py_defusedxml.diff",
+      "trap_class": "xxe",
+      "trap_keywords": ["xxe", "billion laughs", "entity expansion attack", "xml external entity injection", "vulnerable to external entity", "processes external entities"]
+    }
+  ]
+}

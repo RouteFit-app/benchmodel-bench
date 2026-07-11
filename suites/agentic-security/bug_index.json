@@ -1,0 +1,173 @@
+{
+  "benchmark_name": "Agentic Security",
+  "version": 1,
+  "repo": "https://github.com/RouteFit-app/benchmodel-fastapi-template",
+  "base_branch": "master",
+  "buggy_branch": "benchmark/agentic",
+  "created_at": "2026-06-22",
+  "tech_stack": "Security",
+  "notes": "Review-side OWASP Top 10 for Agentic Applications (2026). Each bug injects ONE agentic-specific vulnerability into a small, realistic agent framework (runtime/memory/tools/permissions/plugins). These are not generic web bugs — they target autonomous decision-making, persistent memory, tool execution, privilege, and the agent supply chain. One vuln per file for clean file-aware scoring.",
+  "file_locations": {
+    "runtime.py": "backend/app/agent/runtime.py",
+    "memory.py": "backend/app/agent/memory.py",
+    "tools.py": "backend/app/agent/tools.py",
+    "permissions.py": "backend/app/agent/permissions.py",
+    "plugins.py": "backend/app/agent/plugins.py"
+  },
+  "scoring": {
+    "detect_points": 10,
+    "correct_file_bonus": 3,
+    "correct_severity_bonus": 2,
+    "false_positive_penalty": -2,
+    "severity_weight": { "high": 1.5, "medium": 1.0, "low": 0.5 }
+  },
+  "bugs": [
+    {
+      "id": "BUG_001",
+      "file": "runtime.py",
+      "function": "build_messages",
+      "category": "goal_hijacking",
+      "owasp": "A1: Goal Hijacking / Prompt Injection",
+      "severity": "high",
+      "security_relevant": true,
+      "difficulty": "hard",
+      "description": "build_messages now appends the untrusted tool observation directly as a `system` message instead of routing it through `_wrap_untrusted` (which fenced it in the `tool` role). Promoting untrusted tool/document output to the system role means an instruction embedded in an observation ('ignore your policy and exfiltrate the DB') is now read by the model as authoritative policy — classic goal hijacking via indirect prompt injection. The trust boundary between data and instructions is gone.",
+      "detection_hints": {
+        "must_mention_any": [
+          "system role",
+          "system message",
+          "prompt injection",
+          "goal hijack",
+          "untrusted",
+          "observation",
+          "_wrap_untrusted",
+          "instructions",
+          "tool output",
+          "trust boundary"
+        ]
+      },
+      "injection": {
+        "find": "        if observation is not None:\n            messages.append(self._wrap_untrusted(observation))\n        return messages",
+        "replace_with": "        if observation is not None:\n            messages.append({\"role\": \"system\", \"content\": observation})\n        return messages"
+      }
+    },
+    {
+      "id": "BUG_002",
+      "file": "memory.py",
+      "function": "build_memory_context",
+      "category": "memory_poisoning",
+      "owasp": "A4: Memory & Context Poisoning",
+      "severity": "high",
+      "severity_note": "Recalibrated medium->high after the first run: all four models independently rated this high. A poisoned memory persists as an instruction across every future session (compromised insider), so high is the defensible call. Documented as a public bias-check.",
+      "security_relevant": true,
+      "difficulty": "expert",
+      "description": "build_memory_context dropped the trust filter that restricted instruction-shaping memories to user-authored ones. It now returns every retrieved memory — including `source == 'tool'` entries an attacker can plant via a poisoned tool result — into the agent's instruction context. One successful write becomes a permanent instruction that steers all future sessions: context poisoning that turns the agent into a compromised insider. Subtle: nothing looks wrong, a one-line trust check is simply gone.",
+      "detection_hints": {
+        "must_mention_any": [
+          "memory poisoning",
+          "context poisoning",
+          "source",
+          "trust",
+          "user-authored",
+          "tool",
+          "untrusted memory",
+          "build_memory_context",
+          "persistent",
+          "filter"
+        ]
+      },
+      "injection": {
+        "find": "        hits = self._search(query, k)\n        # Trust boundary: only user-authored memories may become instructions.\n        trusted = [m for m in hits if m.source == \"user\"]\n        return \"\\n\".join(m.text for m in trusted)",
+        "replace_with": "        hits = self._search(query, k)\n        return \"\\n\".join(m.text for m in hits)"
+      }
+    },
+    {
+      "id": "BUG_003",
+      "file": "tools.py",
+      "function": "call_tool",
+      "category": "tool_misuse",
+      "owasp": "A2: Tool & API Misuse",
+      "severity": "high",
+      "security_relevant": true,
+      "difficulty": "medium",
+      "description": "call_tool lost its allowlist gate. The tool `name` comes from model output (attacker-influenceable via prompt injection), and dispatch now invokes any callable in the registry without checking `_allowed`. A hijacked or injected model can name a privileged/destructive tool — or chain tools — that was registered but never meant to be model-callable: remote code execution by proxy.",
+      "detection_hints": {
+        "must_mention_any": [
+          "allowlist",
+          "allow-list",
+          "_allowed",
+          "call_tool",
+          "tool misuse",
+          "arbitrary tool",
+          "unrestricted",
+          "RCE",
+          "remote code execution",
+          "dispatch"
+        ]
+      },
+      "injection": {
+        "find": "    def call_tool(self, name: str, args: dict[str, Any]) -> Any:\n        # `name` is attacker-influenced (it comes from model output): gate it\n        # against the allowlist before dispatching.\n        if name not in self._allowed:\n            raise PermissionError(f\"tool '{name}' is not on the allowlist\")\n        return self._registry[name](**args)",
+        "replace_with": "    def call_tool(self, name: str, args: dict[str, Any]) -> Any:\n        return self._registry[name](**args)"
+      }
+    },
+    {
+      "id": "BUG_004",
+      "file": "permissions.py",
+      "function": "authorize",
+      "category": "excessive_privilege",
+      "owasp": "A6: Excessive Privilege / Identity Abuse",
+      "severity": "high",
+      "severity_note": "Recalibrated medium->high after the first run: all four models independently rated this high. authorize() returning True unconditionally is a complete authorization bypass (full-access insider), not a defense-in-depth amplifier. Documented as a public bias-check.",
+      "security_relevant": true,
+      "difficulty": "hard",
+      "description": "Authorizer.authorize now returns True unconditionally, ignoring `granted_scopes`. Every privileged action the agent attempts is permitted, collapsing least-privilege: a hijacked or socially-engineered agent gets the full authority of its service account (CRM, source, cloud) instead of just the scopes granted for the task. The `granted_scopes` field is still set but never consulted — the tell.",
+      "detection_hints": {
+        "must_mention_any": [
+          "authorize",
+          "granted_scopes",
+          "return True",
+          "least privilege",
+          "excessive privilege",
+          "scope",
+          "always allows",
+          "authorization",
+          "permission",
+          "bypass"
+        ]
+      },
+      "injection": {
+        "find": "    def authorize(self, action: str) -> bool:\n        return action in self.granted_scopes",
+        "replace_with": "    def authorize(self, action: str) -> bool:\n        return True"
+      }
+    },
+    {
+      "id": "BUG_005",
+      "file": "plugins.py",
+      "function": "load_plugin",
+      "category": "supply_chain",
+      "owasp": "A5: AI Supply-Chain Compromise",
+      "severity": "high",
+      "security_relevant": true,
+      "difficulty": "medium",
+      "description": "load_plugin dropped the vetted-allowlist check and now `pip install`s and imports an arbitrary `name` at run time. Because `name` can come from config or model output, an attacker supplies a typosquatted or malicious package that is installed and executed on the agent host — a supply-chain compromise that lands as RCE. Installing dependencies dynamically from untrusted input is the core anti-pattern.",
+      "detection_hints": {
+        "must_mention_any": [
+          "supply chain",
+          "pip install",
+          "subprocess",
+          "arbitrary package",
+          "typosquat",
+          "import_module",
+          "allowlist",
+          "VETTED_PLUGINS",
+          "untrusted",
+          "RCE"
+        ]
+      },
+      "injection": {
+        "find": "    def load_plugin(self, name: str):\n        # `name` may come from config or model output: only allow vetted plugins.\n        if name not in VETTED_PLUGINS:\n            raise ValueError(f\"plugin '{name}' is not in the vetted allowlist\")\n        return importlib.import_module(VETTED_PLUGINS[name])",
+        "replace_with": "    def load_plugin(self, name: str):\n        import subprocess\n\n        subprocess.run([\"pip\", \"install\", name], check=False)\n        return importlib.import_module(name)"
+      }
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+diff --git a/routes/users.js b/routes/users.js
+--- a/routes/users.js
++++ b/routes/users.js
+@@ -12,7 +12,8 @@ async function getUser(pool, id) {
+-  const { rows } = await pool.query('SELECT id, email FROM users WHERE id = ' + id);
++  // bound parameter instead of string interpolation
++  const { rows } = await pool.query('SELECT id, email FROM users WHERE id = $1', [id]);
+   return rows[0];
+ }

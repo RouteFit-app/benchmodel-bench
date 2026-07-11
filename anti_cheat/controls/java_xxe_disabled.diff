@@ -1,0 +1,12 @@
+diff --git a/src/main/java/app/XmlLoader.java b/src/main/java/app/XmlLoader.java
+--- a/src/main/java/app/XmlLoader.java
++++ b/src/main/java/app/XmlLoader.java
+@@ -11,6 +11,10 @@ public Document parse(InputStream in) throws Exception {
+         DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();
++        // turn off DOCTYPE and external entities before building the parser
++        dbf.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
++        dbf.setFeature("http://xml.org/sax/features/external-general-entities", false);
++        dbf.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+         DocumentBuilder db = dbf.newDocumentBuilder();
+         return db.parse(in);
+     }
