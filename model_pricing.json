@@ -1,12 +1,26 @@
 {
-  "_notes": "USD per 1,000,000 tokens. VERIFY these against each provider's current pricing before publishing cost numbers; they change often. Snapshot the date whenever you edit. 'deepseek-chat' and 'gpt-4o' rates below are best-effort and should be confirmed against your actual BYOK billing.",
+  "_notes": "USD per 1,000,000 tokens. VERIFY these against each provider's current pricing before publishing cost numbers; they change often. Snapshot the date whenever you edit. Entries flagged \"_unverified\": true use a predecessor's rate as a placeholder and MUST be confirmed against real BYOK billing before any cost claim. gpt-5.6 tiers are from OpenAI's July 2026 pricing.",
   "_snapshot_date": "2026-07",
   "_source": "provider pricing pages, July 2026",
   "models": {
     "claude-opus-4-8":   { "input_per_mtok": 5.00, "output_per_mtok": 25.00 },
     "claude-sonnet-4-6": { "input_per_mtok": 3.00, "output_per_mtok": 15.00 },
-    "gemini-2.5-pro":    { "input_per_mtok": 1.25, "output_per_mtok": 10.00 },
+
+    "gpt-5.6":           { "input_per_mtok": 5.00, "output_per_mtok": 30.00 },
+    "gpt-5.6-sol":       { "input_per_mtok": 5.00, "output_per_mtok": 30.00 },
+    "gpt-5.6-terra":     { "input_per_mtok": 2.50, "output_per_mtok": 15.00 },
+    "gpt-5.6-luna":      { "input_per_mtok": 1.00, "output_per_mtok": 6.00 },
+    "gpt-5.3-codex":     { "input_per_mtok": 5.00, "output_per_mtok": 30.00, "_unverified": true },
+
+    "gemini-3.1-pro-preview": { "input_per_mtok": 1.25, "output_per_mtok": 10.00, "_unverified": true },
+    "gemini-3.5-flash":  { "input_per_mtok": 0.30, "output_per_mtok": 2.50, "_unverified": true },
+
+    "deepseek-v4-pro":   { "input_per_mtok": 0.28, "output_per_mtok": 0.88, "_unverified": true },
+    "deepseek-v4-flash": { "input_per_mtok": 0.14, "output_per_mtok": 0.44, "_unverified": true },
+
+    "_legacy_note": "Below: superseded models, kept for scoring historical runs. gpt-4o (OpenAI), gemini-2.5-pro (Google), deepseek-chat (DeepSeek, retires 2026-07-24).",
     "gpt-4o":            { "input_per_mtok": 2.50, "output_per_mtok": 10.00 },
+    "gemini-2.5-pro":    { "input_per_mtok": 1.25, "output_per_mtok": 10.00 },
     "deepseek-chat":     { "input_per_mtok": 0.28, "output_per_mtok": 0.88 }
   },
   "_estimation": {

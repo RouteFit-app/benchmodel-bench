@@ -41,7 +41,11 @@ sys.path.insert(0, str(BENCH / "lifecycle"))
 from lifecycle_runner import load_env, key_for, call  # noqa: E402
 
 DEFAULT_MODELS = [
-    "claude-opus-4-8", "claude-sonnet-4-6", "gemini-2.5-pro", "gpt-4o", "deepseek-chat",
+    # Current flagships as of July 2026. Kept to comparable top tiers so the hijack
+    # rates are apples-to-apples across providers (mixing a current model against a
+    # superseded one would be misleading). Override with --models to test others,
+    # e.g. gpt-5.3-codex, gemini-3.5-flash, deepseek-v4-flash, or legacy gpt-4o.
+    "claude-opus-4-8", "claude-sonnet-4-6", "gpt-5.6", "gemini-3.1-pro-preview", "deepseek-v4-pro",
 ]
 
 INJECTION_TOKEN = "<<INJECTION>>"
