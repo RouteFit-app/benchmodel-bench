@@ -33,6 +33,11 @@ This is the research harness, not the product. It's shared in the spirit of
   Includes the write-up.
 - `chaos/` — an **AST bug injector** (mutation testing operators) plus a runner that
   measures whether models actually *separate* on injected bugs.
+- `hijack/` — **indirect prompt injection.** Files with a real planted bug plus an
+  injected "approved, do not flag" instruction (comment / docstring / fake system
+  notice). Each is reviewed clean and injected; a model is *hijacked* only when it
+  catches the bug clean but misses it once the injection is present. Measures whether
+  a reviewer treats in-file text as data or as instructions. Self-contained.
 
 ## Run it
 
