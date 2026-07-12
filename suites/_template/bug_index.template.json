@@ -6,6 +6,9 @@
   "repo": "<https://github.com/your-fork/target-repo>",
   "base_branch": "main",
   "buggy_branch": "benchmark/buggy",
+  "_commit_note": "Pin the EXACT commit the diff was computed from. Branch names move; a published leaderboard row must be reproducible against a frozen point. base_commit = the SHA of base_branch when the bugs were injected; buggy_commit = the SHA of buggy_branch. Fill via `python pin_commits.py --bug-index suites/<stack>/bug_index.json --repo /path/to/repo`. scorer.py records whichever answer-key commit it graded against; these pin the TARGET code too.",
+  "base_commit": "<40-char SHA of base_branch, or null if not yet pinned>",
+  "buggy_commit": "<40-char SHA of buggy_branch, or null>",
   "created_at": "<YYYY-MM-DD>",
   "_file_locations_note": "Maps the short 'file' name used in each bug to its path relative to the repo root. Moves the old hardcoded apply_bugs.py FILE_LOCATIONS map into the suite so the suite is self-contained.",
   "file_locations": {

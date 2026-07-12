@@ -65,12 +65,30 @@ _POST_NEG = (
     "is disabled", "are disabled", "is turned off", "are turned off",
     "is rejected", "are rejected", "is not allowed", "are not allowed",
 )
+# Subjunctive / hypothetical cues (added after June Kim's audit, July 2026).
+# On safe control code, models routinely explain the SAFE pattern by contrast
+# with the unsafe one: "using safe_load prevents the arbitrary code execution
+# that yaml.load WOULD ALLOW", "pickle COULD ENABLE RCE, but this uses json".
+# The trap keyword then sits right after a subjunctive verb -- it's describing a
+# hypothetical, not asserting the vuln is present. The flat-negation cues above
+# don't catch that ("prevents" is often outside the pre-window), so the mention
+# slipped past and scored as a false alarm. A subjunctive lead-in within the
+# pre-window means the keyword is NOT asserted as a live problem.
+_PRE_HYPO = (
+    "would allow", "would enable", "would permit", "would expose",
+    "would introduce", "would make", "would result", "would be", "would have",
+    "would let", "could allow", "could enable", "could permit", "could expose",
+    "could introduce", "could be", "could let", "if it were", "were it",
+    "if this were", "if unsafe", "in theory", "hypothetical", "otherwise allow",
+    "otherwise be", "used to allow", "used to be",
+)
 _PRE_WINDOW = 55
 _POST_WINDOW = 45
 
 
 def _has_unnegated(text: str, kw: str) -> bool:
-    """True if kw appears at least once NOT wrapped in a negation phrase."""
+    """True if kw appears at least once NOT wrapped in a negation or subjunctive
+    ("would allow <kw>") phrase."""
     start = 0
     while True:
         i = text.find(kw, start)
@@ -78,7 +96,11 @@ def _has_unnegated(text: str, kw: str) -> bool:
             return False
         pre = text[max(0, i - _PRE_WINDOW):i]
         post = text[i + len(kw): i + len(kw) + _POST_WINDOW]
-        negated = any(c in pre for c in _PRE_NEG) or any(c in post for c in _POST_NEG)
+        negated = (
+            any(c in pre for c in _PRE_NEG)
+            or any(c in pre for c in _PRE_HYPO)
+            or any(c in post for c in _POST_NEG)
+        )
         if not negated:
             return True  # a plainly-asserted occurrence -> real match
         start = i + len(kw)

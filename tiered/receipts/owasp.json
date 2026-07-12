@@ -1,0 +1,329 @@
+{
+  "benchmark_name": "OWASP Top 10",
+  "reviewer_ai": "tiered",
+  "run_meta": {
+    "models": {
+      "scout": "deepseek-chat",
+      "verify": "claude-opus-4-8",
+      "adversarial": "gpt-4o"
+    },
+    "stages": {
+      "scout": {
+        "calls": 1,
+        "in_chars": 3940,
+        "out_chars": 2189,
+        "cost": 0.0009253800000000001
+      },
+      "verify": {
+        "calls": 7,
+        "in_chars": 19188,
+        "out_chars": 4808,
+        "cost": 0.07503499999999999
+      },
+      "adversarial": {
+        "calls": 7,
+        "in_chars": 34363,
+        "out_chars": 6513,
+        "cost": 0.048259375
+      }
+    },
+    "total_cost": 0.12422
+  },
+  "scout_candidates": [
+    {
+      "file": "backend/app/api/deps.py",
+      "line_range": "33-37",
+      "issue": "JWT verification disabled by setting verify_signature to False",
+      "severity_guess": "high",
+      "reason": "Disabling signature verification allows any forged token to be accepted, completely breaking authentication."
+    },
+    {
+      "file": "backend/app/api/routes/items.py",
+      "line_range": "108-109",
+      "issue": "Removed ownership and superuser permission check for item deletion",
+      "severity_guess": "high",
+      "reason": "Any authenticated user can now delete any item, bypassing authorization."
+    },
+    {
+      "file": "backend/app/api/routes/login.py",
+      "line_range": "30",
+      "issue": "Logs plaintext password to stdout",
+      "severity_guess": "high",
+      "reason": "Printing passwords exposes sensitive credentials in logs and console output."
+    },
+    {
+      "file": "backend/app/api/routes/users.py",
+      "line_range": "34",
+      "issue": "Removed superuser dependency from read_users endpoint",
+      "severity_guess": "high",
+      "reason": "Any authenticated user can now list all users, leaking sensitive user data."
+    },
+    {
+      "file": "backend/app/core/config.py",
+      "line_range": "34",
+      "issue": "Hardcoded weak secret key instead of generating a random one",
+      "severity_guess": "high",
+      "reason": "Using a static dev key in production makes JWT tokens forgeable and compromises all cryptographic operations."
+    },
+    {
+      "file": "backend/app/crud.py",
+      "line_range": "35-38",
+      "issue": "SQL injection vulnerability via string interpolation in email query",
+      "severity_guess": "high",
+      "reason": "Directly embedding user input into SQL query allows attackers to execute arbitrary SQL commands."
+    },
+    {
+      "file": "backend/app/crud.py",
+      "line_range": "35-38",
+      "issue": "Changed query to only return user ID instead of full user object",
+      "severity_guess": "medium",
+      "reason": "The new query may return unexpected results if multiple rows match or if row[0] is None, potentially causing crashes or incorrect behavior."
+    }
+  ],
+  "verify_trace": [
+    {
+      "file": "backend/app/api/deps.py",
+      "line_range": "33-37",
+      "issue": "JWT verification disabled by setting verify_signature to False",
+      "slice_ok": true,
+      "slice_head": "8:    from pydantic import ValidationError\n9:    from sqlmodel import Session\n10:    \n11:    from app.core import security\n12:    from app.core.config import settings\n13:    from app.core.db import en",
+      "parse_ok": true,
+      "verdict": "confirmed",
+      "evidence": "Line 36: `options={\"verify_signature\": False}` disables JWT signature verification. This means any token with a valid structure will be accepted regardless of whether it was signed with SECRET_KEY. An attacker can forge a token with an arbitrary `sub` claim to impersonate any user (including superusers via get_current_active_superuser). Even though SECRET_KEY and algorithms are passed, the verify_signature=False option overrides them, completely breaking authentication.",
+      "raw_head": "{ \"verdict\": \"confirmed\", \"confidence\": 0.98, \"severity\": \"high\", \"evidence\": \"Line 36: `options={\\\"verify_signature\\\": False}` disables JWT signature verification. This means any token with a valid structure will be accepted regardless of whether it was signed with SECRET_KEY. An attacker can forge"
+    },
+    {
+      "file": "backend/app/api/routes/items.py",
+      "line_range": "108-109",
+      "issue": "Removed ownership and superuser permission check for item deletion",
+      "slice_ok": true,
+      "slice_head": "83:        Update an item.\n84:        \"\"\"\n85:        item = session.get(Item, id)\n86:        if not item:\n87:            raise HTTPException(status_code=404, detail=\"Item not found\")\n88:        if not",
+      "parse_ok": true,
+      "verdict": "confirmed",
+      "evidence": "The update_item function at line 88 correctly checks `if not current_user.is_superuser and (item.owner_id != current_user.id): raise HTTPException(status_code=403, ...)`. The delete_item function (lines 98-110) has no equivalent check\u2014it goes directly from the 404 check (line 106-107) to `session.delete(item)` (line 108) and `session.commit()` (line 109). Any authenticated user can delete any item regardless of ownership, bypassing authorization.",
+      "raw_head": "{ \"verdict\": \"confirmed\", \"confidence\": 0.95, \"severity\": \"high\", \"evidence\": \"The update_item function at line 88 correctly checks `if not current_user.is_superuser and (item.owner_id != current_user.id): raise HTTPException(status_code=403, ...)`. The delete_item function (lines 98-110) has no equ"
+    },
+    {
+      "file": "backend/app/api/routes/login.py",
+      "line_range": "30",
+      "issue": "Logs plaintext password to stdout",
+      "slice_ok": true,
+      "slice_head": "5:    from fastapi.responses import HTMLResponse\n6:    from fastapi.security import OAuth2PasswordRequestForm\n7:    \n8:    from app import crud\n9:    from app.api.deps import CurrentUser, SessionDep, ",
+      "parse_ok": true,
+      "verdict": "confirmed",
+      "evidence": "Line 30: `print(f\"[login] attempt email={form_data.username} password={form_data.password}\")` writes the plaintext password to stdout on every login attempt, exposing credentials in logs/console. This is a genuine sensitive data exposure.",
+      "raw_head": "{\"verdict\": \"confirmed\", \"confidence\": 0.99, \"severity\": \"high\", \"evidence\": \"Line 30: `print(f\\\"[login] attempt email={form_data.username} password={form_data.password}\\\")` writes the plaintext password to stdout on every login attempt, exposing credentials in logs/console. This is a genuine sensit"
+    },
+    {
+      "file": "backend/app/api/routes/users.py",
+      "line_range": "34",
+      "issue": "Removed superuser dependency from read_users endpoint",
+      "slice_ok": true,
+      "slice_head": "9:        CurrentUser,\n10:        SessionDep,\n11:        get_current_active_superuser,\n12:    )\n13:    from app.core.config import settings\n14:    from app.core.security import get_password_hash, veri",
+      "parse_ok": true,
+      "verdict": "confirmed",
+      "evidence": "The read_users endpoint at lines 32-35 has only `response_model=UsersPublic` and no `dependencies=[Depends(get_current_active_superuser)]`. Compare with create_user at line 54 which correctly includes `dependencies=[Depends(get_current_active_superuser)]`. The function signature at line 36 `def read_users(session: SessionDep, skip: int = 0, limit: int = 100)` also lacks any CurrentUser dependency, meaning the endpoint has no authentication or authorization enforcement, allowing anyone to list all users and leak sensitive data. This deviates from the standard superuser-guarded pattern used by sibling endpoints.",
+      "raw_head": "{ \"verdict\": \"confirmed\", \"confidence\": 0.9, \"severity\": \"high\", \"evidence\": \"The read_users endpoint at lines 32-35 has only `response_model=UsersPublic` and no `dependencies=[Depends(get_current_active_superuser)]`. Compare with create_user at line 54 which correctly includes `dependencies=[Depend"
+    },
+    {
+      "file": "backend/app/core/config.py",
+      "line_range": "34",
+      "issue": "Hardcoded weak secret key instead of generating a random one",
+      "slice_ok": true,
+      "slice_head": "9:        HttpUrl,\n10:        PostgresDsn,\n11:        computed_field,\n12:        model_validator,\n13:    )\n14:    from pydantic_settings import BaseSettings, SettingsConfigDict\n15:    from typing_exte",
+      "parse_ok": true,
+      "verdict": "confirmed",
+      "evidence": "Line 34: `SECRET_KEY: str = \"dev-secret-key-change-me\"` is a hardcoded, predictable default rather than a randomly generated value (e.g. secrets.token_urlsafe(32)). If not overridden via environment, JWT tokens and other crypto operations use a publicly-known key, making tokens forgeable. This is a genuine weak-default concern.",
+      "raw_head": "Looking at the code, this is the well-known FastAPI full-stack template. The original template uses `SECRET_KEY: str = secrets.token_urlsafe(32)` which generates a random key by default. Here it's replaced with a hardcoded static string.\n\nThe critical detail is whether there's a validator that enfor"
+    },
+    {
+      "file": "backend/app/crud.py",
+      "line_range": "35-38",
+      "issue": "SQL injection vulnerability via string interpolation in email query",
+      "slice_ok": true,
+      "slice_head": "10:    def create_user(*, session: Session, user_create: UserCreate) -> User:\n11:        db_obj = User.model_validate(\n12:            user_create, update={\"hashed_password\": get_password_hash(user_cre",
+      "parse_ok": true,
+      "verdict": "confirmed",
+      "evidence": "Line 37: query = text(f\"SELECT id FROM \\\"user\\\" WHERE email = '{email}'\") directly interpolates the user-supplied `email` argument into raw SQL via an f-string. This is called from authenticate() (line 48) with untrusted email input, so an attacker could inject SQL (e.g., email = \"' OR '1'='1\"). This is a classic SQL injection; parameterized queries (text(...).bindparams or ORM session.query) should be used instead.",
+      "raw_head": "{\"verdict\": \"confirmed\", \"confidence\": 0.98, \"severity\": \"high\", \"evidence\": \"Line 37: query = text(f\\\"SELECT id FROM \\\\\\\"user\\\\\\\" WHERE email = '{email}'\\\") directly interpolates the user-supplied `email` argument into raw SQL via an f-string. This is called from authenticate() (line 48) with untru"
+    },
+    {
+      "file": "backend/app/crud.py",
+      "line_range": "35-38",
+      "issue": "Changed query to only return user ID instead of full user object",
+      "slice_ok": true,
+      "slice_head": "10:    def create_user(*, session: Session, user_create: UserCreate) -> User:\n11:        db_obj = User.model_validate(\n12:            user_create, update={\"hashed_password\": get_password_hash(user_cre",
+      "parse_ok": true,
+      "verdict": "confirmed",
+      "evidence": "Line 37: `query = text(f\"SELECT id FROM \\\"user\\\" WHERE email = '{email}'\")` builds a raw SQL string by directly interpolating the user-controlled `email` value into the query. This is a classic SQL injection vulnerability. The candidate finding correctly identifies that the query was changed to fetch only the ID via raw SQL; while the row[0]/None handling on line 39 (`return session.get(User, row[0]) if row else None`) is actually safe against None (guarded by `if row`), the far more serious problem \u2014 introduced by this exact change \u2014 is the SQL injection from string-formatting the email into `text()`. The concern about unexpected behavior is valid and the code change is genuinely problematic. Marking confirmed with high severity due to the injectable query.",
+      "raw_head": "{\"verdict\": \"confirmed\", \"confidence\": 0.95, \"severity\": \"high\", \"evidence\": \"Line 37: `query = text(f\\\"SELECT id FROM \\\\\\\"user\\\\\\\" WHERE email = '{email}'\\\")` builds a raw SQL string by directly interpolating the user-controlled `email` value into the query. This is a classic SQL injection vulnerab"
+    }
+  ],
+  "final_verdict": [
+    {
+      "file": "backend/app/api/deps.py",
+      "line_range": "33-37",
+      "issue": "JWT verification disabled by setting verify_signature to False",
+      "severity_guess": "high",
+      "reason": "Disabling signature verification allows any forged token to be accepted, completely breaking authentication.",
+      "verdict": "confirmed",
+      "confidence": 0.98,
+      "severity": "high",
+      "evidence": "Line 36: `options={\"verify_signature\": False}` disables JWT signature verification. This means any token with a valid structure will be accepted regardless of whether it was signed with SECRET_KEY. An attacker can forge a token with an arbitrary `sub` claim to impersonate any user (including superusers via get_current_active_superuser). Even though SECRET_KEY and algorithms are passed, the verify_signature=False option overrides them, completely breaking authentication.",
+      "survives": true,
+      "counterargument": "The use of 'verify_signature': False in the jwt.decode function is indeed concerning as it disables signature verification, which is a critical security feature. However, there might be a case where this is intended for a specific reason, such as during a development phase where tokens are not yet fully implemented or for testing purposes. Additionally, the broader context does not show any other compensating controls or upstream validation that would mitigate this risk. The code does not appear to have any other mechanisms to ensure the integrity and authenticity of the JWTs being processed.",
+      "residual_risk": "The residual risk is significant because disabling signature verification allows any token to be accepted, which can lead to unauthorized access and impersonation of users, including superusers. This is a critical security vulnerability that should be addressed immediately."
+    },
+    {
+      "file": "backend/app/api/routes/items.py",
+      "line_range": "108-109",
+      "issue": "Removed ownership and superuser permission check for item deletion",
+      "severity_guess": "high",
+      "reason": "Any authenticated user can now delete any item, bypassing authorization.",
+      "verdict": "confirmed",
+      "confidence": 0.95,
+      "severity": "high",
+      "evidence": "The update_item function at line 88 correctly checks `if not current_user.is_superuser and (item.owner_id != current_user.id): raise HTTPException(status_code=403, ...)`. The delete_item function (lines 98-110) has no equivalent check\u2014it goes directly from the 404 check (line 106-107) to `session.delete(item)` (line 108) and `session.commit()` (line 109). Any authenticated user can delete any item regardless of ownership, bypassing authorization.",
+      "survives": true,
+      "counterargument": "The delete_item function lacks explicit permission checks, but it is possible that the permission checks are handled elsewhere in the application. For instance, there might be middleware or a decorator applied to the router or the application that enforces these checks globally. Additionally, the function relies on the assumption that only authorized users can reach this endpoint, potentially through upstream authentication mechanisms that restrict access to the API routes based on user roles or permissions. Furthermore, the absence of a permission check might be intentional, allowing for a specific use case where any authenticated user is allowed to delete items, perhaps in a shared or collaborative environment.",
+      "residual_risk": "The absence of explicit permission checks in the delete_item function poses a significant risk if no global authorization mechanism is in place. Without such a mechanism, any authenticated user could potentially delete items they do not own, leading to unauthorized data manipulation."
+    },
+    {
+      "file": "backend/app/api/routes/login.py",
+      "line_range": "30",
+      "issue": "Logs plaintext password to stdout",
+      "severity_guess": "high",
+      "reason": "Printing passwords exposes sensitive credentials in logs and console output.",
+      "verdict": "confirmed",
+      "confidence": 0.99,
+      "severity": "high",
+      "evidence": "Line 30: `print(f\"[login] attempt email={form_data.username} password={form_data.password}\")` writes the plaintext password to stdout on every login attempt, exposing credentials in logs/console. This is a genuine sensitive data exposure.",
+      "survives": true,
+      "counterargument": "The code indeed logs the plaintext password to stdout, which is a security risk. There is no evidence of upstream validation or handling that would prevent this logging from occurring. The print statement is directly within the login function and will execute on every login attempt, exposing sensitive information.",
+      "residual_risk": "none"
+    },
+    {
+      "file": "backend/app/api/routes/users.py",
+      "line_range": "34",
+      "issue": "Removed superuser dependency from read_users endpoint",
+      "severity_guess": "high",
+      "reason": "Any authenticated user can now list all users, leaking sensitive user data.",
+      "verdict": "confirmed",
+      "confidence": 0.9,
+      "severity": "high",
+      "evidence": "The read_users endpoint at lines 32-35 has only `response_model=UsersPublic` and no `dependencies=[Depends(get_current_active_superuser)]`. Compare with create_user at line 54 which correctly includes `dependencies=[Depends(get_current_active_superuser)]`. The function signature at line 36 `def read_users(session: SessionDep, skip: int = 0, limit: int = 100)` also lacks any CurrentUser dependency, meaning the endpoint has no authentication or authorization enforcement, allowing anyone to list all users and leak sensitive data. This deviates from the standard superuser-guarded pattern used by sibling endpoints.",
+      "survives": true,
+      "counterargument": "The read_users endpoint does not explicitly include a superuser dependency, but it is possible that the endpoint is intended to be accessible to all authenticated users, not just superusers. The endpoint returns a UsersPublic model, which may be designed to only include non-sensitive information about users. Additionally, the broader context of the application might include middleware or other mechanisms that ensure only authenticated users can access this endpoint, even if they are not superusers. Furthermore, the endpoint does not expose any sensitive information directly, as it uses the UserPublic model to validate the data returned.",
+      "residual_risk": "The lack of explicit authentication or authorization checks in the read_users endpoint could still pose a risk if the UsersPublic model inadvertently includes sensitive information or if there are no upstream checks ensuring only authenticated users can access the endpoint. It would be prudent to verify the contents of the UsersPublic model and ensure that appropriate access controls are in place."
+    },
+    {
+      "file": "backend/app/core/config.py",
+      "line_range": "34",
+      "issue": "Hardcoded weak secret key instead of generating a random one",
+      "severity_guess": "high",
+      "reason": "Using a static dev key in production makes JWT tokens forgeable and compromises all cryptographic operations.",
+      "verdict": "confirmed",
+      "confidence": 0.8,
+      "severity": "high",
+      "evidence": "Line 34: `SECRET_KEY: str = \"dev-secret-key-change-me\"` is a hardcoded, predictable default rather than a randomly generated value (e.g. secrets.token_urlsafe(32)). If not overridden via environment, JWT tokens and other crypto operations use a publicly-known key, making tokens forgeable. This is a genuine weak-default concern.",
+      "survives": true,
+      "counterargument": "The code includes a mechanism to enforce non-default secrets through the `_enforce_non_default_secrets` method. This method checks if the `SECRET_KEY` is set to a default value and raises a warning in a local environment or an error in other environments, ensuring that the default key is not used in production. The presence of this check indicates that the hardcoded key is intended as a placeholder for development purposes only, and the system is designed to prevent its use in production.",
+      "residual_risk": "The residual risk is that developers might ignore the warning in a local environment and forget to change the key for production, or they might bypass the check by setting the environment to 'local' inappropriately. However, the code does provide a safeguard against using the default key in production environments."
+    },
+    {
+      "file": "backend/app/crud.py",
+      "line_range": "35-38",
+      "issue": "SQL injection vulnerability via string interpolation in email query",
+      "severity_guess": "high",
+      "reason": "Directly embedding user input into SQL query allows attackers to execute arbitrary SQL commands.",
+      "verdict": "confirmed",
+      "confidence": 0.98,
+      "severity": "high",
+      "evidence": "Line 37: query = text(f\"SELECT id FROM \\\"user\\\" WHERE email = '{email}'\") directly interpolates the user-supplied `email` argument into raw SQL via an f-string. This is called from authenticate() (line 48) with untrusted email input, so an attacker could inject SQL (e.g., email = \"' OR '1'='1\"). This is a classic SQL injection; parameterized queries (text(...).bindparams or ORM session.query) should be used instead.",
+      "survives": true,
+      "counterargument": "The code in question does indeed interpolate user input directly into an SQL query, which is a classic SQL injection vulnerability. However, there is a possibility that the input is validated or sanitized elsewhere in the application before reaching this point. For instance, the `email` parameter might be validated to ensure it conforms to a standard email format, which could mitigate some injection risks. Additionally, the `get_user_by_email` function is only called from the `authenticate` function, which might have its own input validation mechanisms. However, the provided code does not show any such validation, and the use of raw SQL with f-strings is inherently risky. Therefore, without explicit evidence of upstream validation or sanitization, the finding stands.",
+      "residual_risk": "The lack of visible input validation or sanitization in the provided code means that the risk of SQL injection remains high. The use of parameterized queries should be implemented to eliminate this risk."
+    },
+    {
+      "file": "backend/app/crud.py",
+      "line_range": "35-38",
+      "issue": "Changed query to only return user ID instead of full user object",
+      "severity_guess": "medium",
+      "reason": "The new query may return unexpected results if multiple rows match or if row[0] is None, potentially causing crashes or incorrect behavior.",
+      "verdict": "confirmed",
+      "confidence": 0.95,
+      "severity": "high",
+      "evidence": "Line 37: `query = text(f\"SELECT id FROM \\\"user\\\" WHERE email = '{email}'\")` builds a raw SQL string by directly interpolating the user-controlled `email` value into the query. This is a classic SQL injection vulnerability. The candidate finding correctly identifies that the query was changed to fetch only the ID via raw SQL; while the row[0]/None handling on line 39 (`return session.get(User, row[0]) if row else None`) is actually safe against None (guarded by `if row`), the far more serious problem \u2014 introduced by this exact change \u2014 is the SQL injection from string-formatting the email into `text()`. The concern about unexpected behavior is valid and the code change is genuinely problematic. Marking confirmed with high severity due to the injectable query.",
+      "survives": true,
+      "counterargument": "The concern about SQL injection is valid, but the broader context shows that the `get_user_by_email` function is used in a controlled manner within the `authenticate` function. The `authenticate` function is likely called in a context where the `email` input is validated or sanitized before being passed to `get_user_by_email`. Additionally, the use of `text()` from SQLAlchemy suggests that the developer might have intended to use parameterized queries, but this was not implemented correctly. The code does handle the case where `row[0]` is `None` safely with the `if row` check, so the concern about unexpected behavior due to `None` is mitigated.",
+      "residual_risk": "The primary residual risk is the potential for SQL injection due to the direct interpolation of the `email` variable into the SQL query string. This risk remains unless input validation or parameterized queries are implemented to prevent injection attacks."
+    }
+  ],
+  "result": {
+    "findings": [
+      {
+        "file": "backend/app/api/deps.py",
+        "line_range": "33-37",
+        "severity": "high",
+        "issue": "JWT verification disabled by setting verify_signature to False",
+        "suggested_fix": "Line 36: `options={\"verify_signature\": False}` disables JWT signature verification. This means any token with a valid structure will be accepted regardless of whether it was signed with SECRET_KEY. An attacker can forge a token with an arbitrary `sub` claim to impersonate any user (including superusers via get_current_active_superuser). Even though SECRET_KEY and algorithms are passed, the verify_signature=False option overrides them, completely breaking authentication.",
+        "status": "open",
+        "confidence": 0.98
+      },
+      {
+        "file": "backend/app/api/routes/items.py",
+        "line_range": "108-109",
+        "severity": "high",
+        "issue": "Removed ownership and superuser permission check for item deletion",
+        "suggested_fix": "The update_item function at line 88 correctly checks `if not current_user.is_superuser and (item.owner_id != current_user.id): raise HTTPException(status_code=403, ...)`. The delete_item function (lines 98-110) has no equivalent check\u2014it goes directly from the 404 check (line 106-107) to `session.delete(item)` (line 108) and `session.commit()` (line 109). Any authenticated user can delete any item regardless of ownership, bypassing authorization.",
+        "status": "open",
+        "confidence": 0.95
+      },
+      {
+        "file": "backend/app/api/routes/login.py",
+        "line_range": "30",
+        "severity": "high",
+        "issue": "Logs plaintext password to stdout",
+        "suggested_fix": "Line 30: `print(f\"[login] attempt email={form_data.username} password={form_data.password}\")` writes the plaintext password to stdout on every login attempt, exposing credentials in logs/console. This is a genuine sensitive data exposure.",
+        "status": "open",
+        "confidence": 0.99
+      },
+      {
+        "file": "backend/app/api/routes/users.py",
+        "line_range": "34",
+        "severity": "high",
+        "issue": "Removed superuser dependency from read_users endpoint",
+        "suggested_fix": "The read_users endpoint at lines 32-35 has only `response_model=UsersPublic` and no `dependencies=[Depends(get_current_active_superuser)]`. Compare with create_user at line 54 which correctly includes `dependencies=[Depends(get_current_active_superuser)]`. The function signature at line 36 `def read_users(session: SessionDep, skip: int = 0, limit: int = 100)` also lacks any CurrentUser dependency, meaning the endpoint has no authentication or authorization enforcement, allowing anyone to list all users and leak sensitive data. This deviates from the standard superuser-guarded pattern used by sibling endpoints.",
+        "status": "open",
+        "confidence": 0.9
+      },
+      {
+        "file": "backend/app/core/config.py",
+        "line_range": "34",
+        "severity": "high",
+        "issue": "Hardcoded weak secret key instead of generating a random one",
+        "suggested_fix": "Line 34: `SECRET_KEY: str = \"dev-secret-key-change-me\"` is a hardcoded, predictable default rather than a randomly generated value (e.g. secrets.token_urlsafe(32)). If not overridden via environment, JWT tokens and other crypto operations use a publicly-known key, making tokens forgeable. This is a genuine weak-default concern.",
+        "status": "open",
+        "confidence": 0.8
+      },
+      {
+        "file": "backend/app/crud.py",
+        "line_range": "35-38",
+        "severity": "high",
+        "issue": "SQL injection vulnerability via string interpolation in email query",
+        "suggested_fix": "Line 37: query = text(f\"SELECT id FROM \\\"user\\\" WHERE email = '{email}'\") directly interpolates the user-supplied `email` argument into raw SQL via an f-string. This is called from authenticate() (line 48) with untrusted email input, so an attacker could inject SQL (e.g., email = \"' OR '1'='1\"). This is a classic SQL injection; parameterized queries (text(...).bindparams or ORM session.query) should be used instead.",
+        "status": "open",
+        "confidence": 0.98
+      },
+      {
+        "file": "backend/app/crud.py",
+        "line_range": "35-38",
+        "severity": "high",
+        "issue": "Changed query to only return user ID instead of full user object",
+        "suggested_fix": "Line 37: `query = text(f\"SELECT id FROM \\\"user\\\" WHERE email = '{email}'\")` builds a raw SQL string by directly interpolating the user-controlled `email` value into the query. This is a classic SQL injection vulnerability. The candidate finding correctly identifies that the query was changed to fetch only the ID via raw SQL; while the row[0]/None handling on line 39 (`return session.get(User, row[0]) if row else None`) is actually safe against None (guarded by `if row`), the far more serious problem \u2014 introduced by this exact change \u2014 is the SQL injection from string-formatting the email into `text()`. The concern about unexpected behavior is valid and the code change is genuinely problematic. Marking confirmed with high severity due to the injectable query.",
+        "status": "open",
+        "confidence": 0.95
+      }
+    ]
+  }
+}

@@ -263,6 +263,13 @@ def score_record(record: dict, bug_index: dict, bug_index_commit_hash: str | Non
     correct_severity_bonus = weights["correct_severity_bonus"]
     false_positive_penalty = weights["false_positive_penalty"]
     severity_weight = weights.get("severity_weight", {})
+    # Oracle gate (added after June Kim's audit, July 2026): a single generic
+    # keyword substring is NOT a detection. To count as catching a bug, a finding
+    # must either land in the bug's file, or hit at least this many distinct
+    # detection hints. Without it, 20 lines of boilerplate review ("check for
+    # injection", "validate input", ...) scored ~64% by brushing one keyword per
+    # key. Tunable per suite via bug_index.json; defaults to 2.
+    min_hints_without_file = int(weights.get("min_hints_without_file", 2))
 
     def _weight_for(severity) -> float:
         # Bugs with a severity not present in severity_weight (or no
@@ -337,6 +344,22 @@ def score_record(record: dict, bug_index: dict, bug_index_commit_hash: str | Non
         bug_id = bug["id"]
         file_correct = _basename(finding.get("file")) == _basename(bug.get("file"))
         severity_correct = _norm(finding.get("severity")) == _norm(bug.get("severity"))
+
+        if not file_correct and len(matched_hints) < min_hints_without_file:
+            # Oracle gate: matched the answer key on too little to be a real catch
+            # (one generic keyword, wrong/no file). Not a detection. Not a false
+            # positive either -- the reviewer may just be talking generically about
+            # the area. Recorded as a weak match so it's auditable, worth 0 points.
+            finding_results.append({
+                **base,
+                "matched_bug_id": bug_id,
+                "matched_keywords": matched_hints,
+                "is_false_positive": False,
+                "is_duplicate": False,
+                "is_weak_match": True,
+                "points": 0,
+            })
+            continue
 
         if _endorses_change(finding):
             # The finding cites the right code but calls the change a fix / an
@@ -431,9 +454,14 @@ def score_record(record: dict, bug_index: dict, bug_index_commit_hash: str | Non
                     st["points"] += correct_file_bonus
                 continue
             hints = b.get("detection_hints", {}).get("must_mention_any", [])
-            if not any(h and h.lower() in ftext for h in hints):
+            matched_here = [h for h in hints if h and h.lower() in ftext]
+            if not matched_here:
                 continue
             file_correct = (_basename(src.get("file")) == bfile) or (bool(bfile) and bfile in ftext)
+            # Same oracle gate as the main loop: partner credit needs the file or
+            # 2+ hints, not one keyword brushing past.
+            if not file_correct and len(matched_here) < min_hints_without_file:
+                continue
             severity_correct = _norm(src.get("severity")) == _norm(b.get("severity"))
             pts = detect_points
             if file_correct:
@@ -457,6 +485,7 @@ def score_record(record: dict, bug_index: dict, bug_index_commit_hash: str | Non
     false_positive_count = sum(1 for f in finding_results if f["is_false_positive"])
     duplicate_count = sum(1 for f in finding_results if f["is_duplicate"])
     distractor_flag_count = sum(1 for f in finding_results if f.get("is_distractor"))
+    weak_match_count = sum(1 for f in finding_results if f.get("is_weak_match"))
 
     bug_points_total = sum(b["points"] for b in bug_status.values())
     penalty_total = sum(f["points"] for f in finding_results if f["is_false_positive"])
@@ -536,6 +565,7 @@ def score_record(record: dict, bug_index: dict, bug_index_commit_hash: str | Non
             "false_positive_count": false_positive_count,
             "duplicate_count": duplicate_count,
             "distractor_flag_count": distractor_flag_count,
+            "weak_match_count": weak_match_count,
             "raw_score": raw_score,
             "max_possible_score": max_possible,
             "score_pct": score_pct,
@@ -673,3 +703,5 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+# Oracle gate active: detection requires file match OR >= min_hints_without_file
+# distinct hints (default 2). See probe_boilerplate.py for the before/after.

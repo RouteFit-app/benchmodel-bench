@@ -1,0 +1,399 @@
+{
+  "benchmark_name": "django-repo main~20..main",
+  "reviewer_ai": "tiered",
+  "run_meta": {
+    "models": {
+      "scout": "deepseek-chat",
+      "verify": "claude-opus-4-8",
+      "adversarial": "gpt-4o"
+    },
+    "stages": {
+      "scout": {
+        "calls": 1,
+        "in_chars": 99705,
+        "out_chars": 7131,
+        "cost": 0.00871617
+      },
+      "verify": {
+        "calls": 20,
+        "in_chars": 66150,
+        "out_chars": 19168,
+        "cost": 0.26248750000000004
+      }
+    },
+    "baseline": {
+      "model": "claude-opus-4-8",
+      "findings": 4,
+      "cost": 0.14332
+    },
+    "total_cost": 0.2712
+  },
+  "scout_candidates": [
+    {
+      "file": "django/contrib/auth/hashers.py",
+      "line_range": "332",
+      "issue": "Removed force_str(password) call in PBKDF2PasswordHasher.encode() may break for non-string passwords.",
+      "severity_guess": "high",
+      "reason": "The encode method previously ensured password was a string; removing this could cause errors if password is bytes or other type."
+    },
+    {
+      "file": "django/contrib/auth/hashers.py",
+      "line_range": "665-666",
+      "issue": "Removed force_str() calls for password and salt in MD5PasswordHasher.encode() changes behavior.",
+      "severity_guess": "high",
+      "reason": "The old code converted password and salt to strings before hashing; new code uses force_bytes() which may produce different hash for non-bytes inputs."
+    },
+    {
+      "file": "django/core/cache/backends/filebased.py",
+      "line_range": "76-78",
+      "issue": "Conditional unlock only if file not closed may leave file locked if _is_expired() does not close it.",
+      "severity_guess": "medium",
+      "reason": "The comment says expired files are closed by _is_expired(), but if that assumption is wrong, the file remains locked."
+    },
+    {
+      "file": "django/core/cache/utils.py",
+      "line_range": "10-12",
+      "issue": "Changed cache key format for template fragments may cause cache misses after upgrade.",
+      "severity_guess": "medium",
+      "reason": "Using netstring delimiter changes the hash input, so existing cached fragments will not be found."
+    },
+    {
+      "file": "django/utils/cache.py",
+      "line_range": "359-363",
+      "issue": "Changed cache key format for vary headers may cause cache misses after upgrade.",
+      "severity_guess": "medium",
+      "reason": "Using netstring delimiter changes the hash input, so existing cached pages with vary headers will not be found."
+    },
+    {
+      "file": "django/utils/cache.py",
+      "line_range": "359",
+      "issue": "Empty string is used for missing header values instead of skipping them, changing cache key.",
+      "severity_guess": "medium",
+      "reason": "Previously missing headers were skipped; now they contribute an empty string to the hash, altering cache keys."
+    },
+    {
+      "file": "django/utils/xmlutils.py",
+      "line_range": "30-32",
+      "issue": "startElement now raises UnserializableContentError for control chars in attribute values, which may break existing serialization.",
+      "severity_guess": "medium",
+      "reason": "Previously attribute values with control characters were silently serialized; now they raise an error."
+    },
+    {
+      "file": "django/views/debug.py",
+      "line_range": "188-199",
+      "issue": "New _cleanse_multivaluedict method may not handle all edge cases of sensitive_post_parameters.",
+      "severity_guess": "low",
+      "reason": "The method assumes sensitive_post_parameters is a list or '__ALL__', but other types could cause errors."
+    },
+    {
+      "file": "django/views/debug.py",
+      "line_range": "206-208",
+      "issue": "get_cleansed_multivaluedict now returns result of _cleanse_multivaluedict instead of modified multivaluedict.",
+      "severity_guess": "low",
+      "reason": "Behavior change may affect subclasses that override get_cleansed_multivaluedict."
+    },
+    {
+      "file": "django/views/debug.py",
+      "line_range": "219-224",
+      "issue": "get_post_parameters now uses _cleanse_multivaluedict which may handle '__ALL__' differently.",
+      "severity_guess": "low",
+      "reason": "Previously '__ALL__' cleansed all parameters in a separate branch; now it goes through the same method."
+    },
+    {
+      "file": "django/core/checks/mail.py",
+      "line_range": "33-63",
+      "issue": "New check may produce false positives if MAILERS setting has non-standard structure.",
+      "severity_guess": "low",
+      "reason": "The check assumes MAILERS['default']['BACKEND'] exists; if the structure is different, it may silently pass or error."
+    },
+    {
+      "file": "django/core/serializers/xml_serializer.py",
+      "line_range": "66-70",
+      "issue": "Catching UnserializableContentError and raising ValueError changes exception type for callers.",
+      "severity_guess": "medium",
+      "reason": "Code that catches UnserializableContentError will no longer catch this exception; they must catch ValueError instead."
+    },
+    {
+      "file": "django/db/models/query.py",
+      "line_range": "1802-1806",
+      "issue": "Changed from warnings.warn to warn_about_external_use may alter deprecation warning behavior.",
+      "severity_guess": "low",
+      "reason": "The new function may have different filtering logic, potentially showing or hiding warnings differently."
+    },
+    {
+      "file": "django/contrib/admin/options.py",
+      "line_range": "2801-2802",
+      "issue": "Moved translator comment inside the expression may break string extraction.",
+      "severity_guess": "low",
+      "reason": "Translator comments must be placed before the string they document; moving it inside the tuple may confuse tools."
+    },
+    {
+      "file": "docs/ref/request-response.txt",
+      "line_range": "451-453",
+      "issue": "Removed versionchanged note about cookie signing fix may mislead users about security fix.",
+      "severity_guess": "low",
+      "reason": "Removing documentation of a security fix could cause users to be unaware of the change."
+    },
+    {
+      "file": "docs/topics/cache.txt",
+      "line_range": "1439-1441",
+      "issue": "Removed versionchanged note about Authorization header in Vary may mislead users.",
+      "severity_guess": "low",
+      "reason": "Removing documentation of a behavior change could cause confusion."
+    },
+    {
+      "file": "tests/admin_changelist/tests.py",
+      "line_range": "1151-1155",
+      "issue": "Changed child creation to use age=i+1 instead of age=i may break test expectations.",
+      "severity_guess": "low",
+      "reason": "The test now creates children with different ages, which may affect other assertions not shown in diff."
+    },
+    {
+      "file": "tests/aggregation/tests.py",
+      "line_range": "2488-2498",
+      "issue": "Changed StringAgg test to use assertCountEqual with split instead of exact match may hide ordering issues.",
+      "severity_guess": "low",
+      "reason": "The new test is less strict and may not catch regressions in StringAgg ordering."
+    },
+    {
+      "file": "tests/aggregation/tests.py",
+      "line_range": "2552-2562",
+      "issue": "Changed StringAgg test to use assertCountEqual with split instead of exact match may hide ordering issues.",
+      "severity_guess": "low",
+      "reason": "The new test is less strict and may not catch regressions in StringAgg ordering."
+    },
+    {
+      "file": "tests/aggregation/tests.py",
+      "line_range": "2631-2642",
+      "issue": "Changed StringAgg test to normalize values before comparison may hide ordering issues.",
+      "severity_guess": "low",
+      "reason": "Sorting the split values loses the original order information from the database."
+    }
+  ],
+  "verify_trace": [
+    {
+      "file": "django/contrib/auth/hashers.py",
+      "line_range": "332",
+      "issue": "Removed force_str(password) call in PBKDF2PasswordHasher.encode() may break for non-string passwords.",
+      "slice_ok": true,
+      "slice_head": "307:            another 10000 iterations of PBKDF2. Similar approaches should exist\n308:            for any hasher that has a work factor. If not, this method should be\n309:            defined as a no",
+      "parse_ok": true,
+      "verdict": "dismissed",
+      "evidence": "Line 332 reads `salt = force_str(salt)` which converts the salt, not the password. The finding's claim about a removed `force_str(password)` cannot be verified from the code shown and is speculative. Django's PBKDF2 has historically applied force_bytes/force_str to salt, and pbkdf2() (line 333) handles the password. No evidence in this code demonstrates a real bug.",
+      "raw_head": "The finding claims `force_str(password)` was removed. Looking at the code, line 332 is `salt = force_str(salt)` \u2014 it applies force_str to salt, not password. The finding is speculative about a \"removed\" call that may or may not have ever existed, and cannot be verified from the code shown. There's n"
+    },
+    {
+      "file": "django/contrib/auth/hashers.py",
+      "line_range": "665-666",
+      "issue": "Removed force_str() calls for password and salt in MD5PasswordHasher.encode() changes behavior.",
+      "slice_ok": true,
+      "slice_head": "640:            }\n641:    \n642:        def must_update(self, encoded):\n643:            decoded = self.decode(encoded)\n644:            return (\n645:                decoded[\"work_factor\"] != self.work_f",
+      "parse_ok": true,
+      "verdict": "dismissed",
+      "evidence": "Line 665 uses hashlib.md5(force_bytes(salt) + force_bytes(password)) which is the standard Django pattern; force_bytes() UTF-8 encodes strings identically to what force_str()+encode would produce, so the hash is unchanged. Line 666 still uses force_str(salt) for the stored salt. No behavioral difference is demonstrated for the typical string inputs, and this matches Django's actual MD5PasswordHasher.encode implementation.",
+      "raw_head": "The candidate claims removal of `force_str()` changed behavior, but `force_bytes()` produces the same UTF-8 encoded bytes that `force_str().encode()` would produce. This matches Django's actual implementation.\n\n```json\n{ \"verdict\": \"dismissed\", \"confidence\": 0.9, \"severity\": \"low\", \"evidence\": \"Line"
+    },
+    {
+      "file": "django/core/cache/backends/filebased.py",
+      "line_range": "76-78",
+      "issue": "Conditional unlock only if file not closed may leave file locked if _is_expired() does not close it.",
+      "slice_ok": true,
+      "slice_head": "51:            self._cull()  # make some room if necessary\n52:            fd, tmp_path = tempfile.mkstemp(dir=self._dir)\n53:            renamed = False\n54:            try:\n55:                with open",
+      "parse_ok": true,
+      "verdict": "dismissed",
+      "evidence": "Line 76-78: '# Expired files are closed & unlocked by _is_expired(). if not f.closed: locks.unlock(f)'. This is the canonical Django implementation. _is_expired() closes the file (via self._delete) when expired, so the guard 'if not f.closed' correctly avoids unlocking an already-closed file. When not expired, the file remains open and is unlocked in the finally block. The unlock is not skipped in the non-expired case. No leak occurs in this code; the assumption about _is_expired() closing expired files is Django's documented behavior. The finding is speculative ('if that assumption is wrong') without evidence the assumption is actually violated.",
+      "raw_head": "The finding depends on `_is_expired()` behavior, which isn't shown. In Django's actual implementation, `_is_expired()` does close the file when expired. The code's comment and conditional `if not f.closed` correctly handle this - unlocking only when the file is still open. This is the standard, corr"
+    },
+    {
+      "file": "django/core/cache/utils.py",
+      "line_range": "10-12",
+      "issue": "Changed cache key format for template fragments may cause cache misses after upgrade.",
+      "slice_ok": true,
+      "slice_head": "1:    from hashlib import md5\n2:    \n3:    TEMPLATE_FRAGMENT_KEY_TEMPLATE = \"template.cache.%s.%s\"\n4:    \n5:    \n6:    def make_template_fragment_key(fragment_name, vary_on=None):\n7:        hasher = m",
+      "parse_ok": true,
+      "verdict": "dismissed",
+      "evidence": "This is the actual Django implementation of make_template_fragment_key (introduced in Django 3.2). The netstring delimiter format 'b\"%d:%s,\"' is the intended, correct design to prevent hash collisions between different vary_on argument boundaries. While it is technically true that changing hash input format invalidates old cache keys, cache invalidation on upgrade is expected and benign \u2014 stale entries simply miss and get regenerated, then expire. There is no correctness or security bug in THIS code; the code is functioning as designed. The finding describes an inherent, acceptable consequence of the deliberate design rather than a defect.",
+      "raw_head": "{\"verdict\": \"dismissed\", \"confidence\": 0.85, \"severity\": \"low\", \"evidence\": \"This is the actual Django implementation of make_template_fragment_key (introduced in Django 3.2). The netstring delimiter format 'b\\\"%d:%s,\\\"' is the intended, correct design to prevent hash collisions between different va"
+    },
+    {
+      "file": "django/utils/cache.py",
+      "line_range": "359-363",
+      "issue": "Changed cache key format for vary headers may cause cache misses after upgrade.",
+      "slice_ok": true,
+      "slice_head": "334:        Check to see if the response has a given header name in its Vary header.\n335:        \"\"\"\n336:        if not response.has_header(\"Vary\"):\n337:            return False\n338:        existing_h",
+      "parse_ok": true,
+      "verdict": "dismissed",
+      "evidence": "Lines 361-363 do change the hash input format ('data = value.encode()' then 'ctx.update(b\"%d:%s,\" % (len(data), data))'), so the resulting cache_key differs from any previous format. However, cache backends are ephemeral by design; a cache key format change causing a one-time miss after upgrade is expected and benign behavior, not a code defect. Stale entries simply expire/repopulate. Furthermore, the netstring delimiter is a correctness improvement preventing header-boundary collisions. This does not constitute a real problem in this code.",
+      "raw_head": "The original Django code does something different. Let me recall the actual original implementation:\n\n```python\nfor header in headerlist:\n    value = request.META.get(header)\n    if value is not None:\n        ctx.update(value.encode())\n```\n\nThe original only updates the hash when value is not None. "
+    },
+    {
+      "file": "django/utils/cache.py",
+      "line_range": "359",
+      "issue": "Empty string is used for missing header values instead of skipping them, changing cache key.",
+      "slice_ok": true,
+      "slice_head": "334:        Check to see if the response has a given header name in its Vary header.\n335:        \"\"\"\n336:        if not response.has_header(\"Vary\"):\n337:            return False\n338:        existing_h",
+      "parse_ok": true,
+      "verdict": "dismissed",
+      "evidence": "Lines 359-363: `if value is None: value = \"\"` followed by netstring encoding `ctx.update(b\"%d:%s,\" % (len(data), data))`. The netstring format with length prefix makes empty strings unambiguous (encoded as `0:,`), which is the intended, correct Django implementation. This code deliberately includes all headers in the header list with unambiguous delimiting; treating None as empty is safe here and does not introduce collisions. The finding merely describes the current correct behavior as if it were a regression, without evidence that skipping was intended.",
+      "raw_head": "Looking at the actual Django source, `_generate_cache_key` uses a netstring-delimited encoding specifically to disambiguate missing vs empty headers. Using the netstring delimiter `b\"%d:%s,\"` with length prefix means empty string is encoded as `0:,` which is distinct from other values. This is inten"
+    },
+    {
+      "file": "django/utils/xmlutils.py",
+      "line_range": "30-32",
+      "issue": "startElement now raises UnserializableContentError for control chars in attribute values, which may break existing serialization.",
+      "slice_ok": true,
+      "slice_head": "5:    from xml.sax.saxutils import XMLGenerator\n6:    \n7:    from django.utils.regex_helper import _lazy_re_compile\n8:    \n9:    _xml_control_chars_re = _lazy_re_compile(r\"[\\x00-\\x08\\x0B-\\x0C\\x0E-\\x1F",
+      "parse_ok": true,
+      "verdict": "dismissed",
+      "evidence": "The cited line range 30-32 is inside the `characters` method ('raise UnserializableContentError' / 'XMLGenerator.characters(self, content)'), not the attribute check. The startElement attribute validation is at lines 34-37: 'if isinstance(value, str) and _xml_control_chars_re.search(value): raise UnserializableContentError'. This is an intentional, consistent validation to fail loudly on control chars unsupported in XML 1.0, mirroring the characters() behavior. It is a deliberate design choice, not a defect in this code.",
+      "raw_head": "The finding points to lines 30-32, which are inside `characters`, not `startElement`. The actual `startElement` control-char check is at lines 34-37. The described behavior (raising on control chars in attribute values) is an intentional validation feature, consistent with the `characters` method \u2014 "
+    },
+    {
+      "file": "django/views/debug.py",
+      "line_range": "188-199",
+      "issue": "New _cleanse_multivaluedict method may not handle all edge cases of sensitive_post_parameters.",
+      "slice_ok": true,
+      "slice_head": "163:        def get_safe_request_meta(self, request):\n164:            \"\"\"\n165:            Return a dictionary of request.META with sensitive values redacted.\n166:            \"\"\"\n167:            if not",
+      "parse_ok": true,
+      "verdict": "dismissed",
+      "evidence": "The finding is speculative and does not identify a concrete bug. The method is called only from get_cleansed_multivaluedict and get_post_parameters, both of which set `sensitive_post_parameters = getattr(request, \"sensitive_post_parameters\", [])` and gate the call with `if self.is_active(request) and sensitive_post_parameters`. The sensitive_post_parameters decorator sets this attribute to either \"__ALL__\" or a list/tuple of param names. The code correctly handles both cases: `if sensitive_post_parameters == \"__ALL__\"` and iterating with `for param in sensitive_post_parameters`. This is a refactor extracting existing behavior; no new edge-case regression is introduced. The claim of 'other types could cause errors' is not supported by any caller in this code.",
+      "raw_head": "{ \"verdict\": \"dismissed\", \"confidence\": 0.85, \"severity\": \"low\", \"evidence\": \"The finding is speculative and does not identify a concrete bug. The method is called only from get_cleansed_multivaluedict and get_post_parameters, both of which set `sensitive_post_parameters = getattr(request, \\\"sensiti"
+    },
+    {
+      "file": "django/views/debug.py",
+      "line_range": "206-208",
+      "issue": "get_cleansed_multivaluedict now returns result of _cleanse_multivaluedict instead of modified multivaluedict.",
+      "slice_ok": true,
+      "slice_head": "181:            This filter is to add safety in production environments (i.e. DEBUG\n182:            is False). If DEBUG is True then your site is not safe anyway.\n183:            This hook is provided",
+      "parse_ok": true,
+      "verdict": "dismissed",
+      "evidence": "Line 207-209 returns `self._cleanse_multivaluedict(multivaluedict, sensitive_post_parameters)`, which internally does `cleansed = multivaluedict.copy()` (line 191) and returns the cleansed copy (line 197). This is functionally correct and mirrors get_post_parameters (line 221). The finding only speculates about subclass override impact and does not identify a defect in this code; the returned value is a properly cleansed MultiValueDict as intended.",
+      "raw_head": "The code correctly returns the cleansed copy. The finding merely describes a refactor and points out possible subclass impact, but this is normal behavior \u2014 the method still returns a properly cleansed MultiValueDict, and `_cleanse_multivaluedict` returns a copy which is the intended result. No actu"
+    },
+    {
+      "file": "django/views/debug.py",
+      "line_range": "219-224",
+      "issue": "get_post_parameters now uses _cleanse_multivaluedict which may handle '__ALL__' differently.",
+      "slice_ok": true,
+      "slice_head": "194:            for param in sensitive_post_parameters:\n195:                if param in multivaluedict:\n196:                    cleansed[param] = self.cleansed_substitute\n197:            return cleans",
+      "parse_ok": true,
+      "verdict": "dismissed",
+      "evidence": "The finding is speculative ('may handle ... differently') and references unseen historical behavior. The reviewed lines 219-222 simply delegate to a shared helper: 'return self._cleanse_multivaluedict(request.POST, sensitive_post_parameters)'. The top of _cleanse_multivaluedict is truncated (only 194-197 shown), so any '__ALL__' branch would appear above line 194 and is not visible. Nothing in the shown code proves '__ALL__' is mishandled; the change is a legitimate refactor to a common method. No concrete defect is demonstrable from this code.",
+      "raw_head": "I need to check whether `_cleanse_multivaluedict` handles the `'__ALL__'` case, since the finding claims previously there was a separate branch.\n\nLooking at the code shown, `_cleanse_multivaluedict` (lines 194-197) only iterates over `sensitive_post_parameters` and cleanses each param found in the d"
+    },
+    {
+      "file": "django/core/checks/mail.py",
+      "line_range": "33-63",
+      "issue": "New check may produce false positives if MAILERS setting has non-standard structure.",
+      "slice_ok": true,
+      "slice_head": "8:        if not settings.is_overridden(\"MAILERS\"):\n9:            return []\n10:    \n11:        if DEFAULT_MAILER_ALIAS in settings.MAILERS:\n12:            return []\n13:    \n14:        if settings.MAIL",
+      "parse_ok": true,
+      "verdict": "dismissed",
+      "evidence": "The code wraps access in try/except catching (AttributeError, KeyError): 'backend = settings.MAILERS[DEFAULT_MAILER_ALIAS][\"BACKEND\"]' followed by 'except (AttributeError, KeyError): return []'. Non-standard or missing structure results in returning [] (no false positive/error), exactly as the comment documents. The finding's concern does not apply.",
+      "raw_head": "{ \"verdict\": \"dismissed\", \"confidence\": 0.9, \"severity\": \"low\", \"evidence\": \"The code wraps access in try/except catching (AttributeError, KeyError): 'backend = settings.MAILERS[DEFAULT_MAILER_ALIAS][\\\"BACKEND\\\"]' followed by 'except (AttributeError, KeyError): return []'. Non-standard or missing st"
+    },
+    {
+      "file": "django/core/serializers/xml_serializer.py",
+      "line_range": "66-70",
+      "issue": "Catching UnserializableContentError and raising ValueError changes exception type for callers.",
+      "slice_ok": true,
+      "slice_head": "41:        def end_serialization(self):\n42:            \"\"\"\n43:            End serialization -- end the document.\n44:            \"\"\"\n45:            self.indent(self.indent_level)\n46:            self.xm",
+      "parse_ok": true,
+      "verdict": "dismissed",
+      "evidence": "The code catches `UnserializableContentError` and raises `ValueError`. This is intentional error normalization to provide a clearer message. In Django's SAX-based XML serialization, `UnserializableContentError` is itself a subclass of `ValueError` (from xml.sax.saxutils/handler). Callers of serializers typically catch broad exceptions, and this pattern of translating a low-level exception into a domain message is a common, deliberate design choice, not a bug in THIS code. No functional defect is demonstrated; the concern is speculative about hypothetical callers rather than an actual problem in the shown code.",
+      "raw_head": "{ \"verdict\": \"dismissed\", \"confidence\": 0.85, \"severity\": \"low\", \"evidence\": \"The code catches `UnserializableContentError` and raises `ValueError`. This is intentional error normalization to provide a clearer message. In Django's SAX-based XML serialization, `UnserializableContentError` is itself a"
+    },
+    {
+      "file": "django/db/models/query.py",
+      "line_range": "1802-1806",
+      "issue": "Changed from warnings.warn to warn_about_external_use may alter deprecation warning behavior.",
+      "slice_ok": true,
+      "slice_head": "1777:            return obj\n1778:    \n1779:        def select_related(self, *fields):\n1780:            \"\"\"\n1781:            Return a new QuerySet instance that will select related objects.\n1782:    \n1",
+      "parse_ok": true,
+      "verdict": "dismissed",
+      "evidence": "The finding is speculative and does not identify a real defect. The code uses `warn_about_external_use(...)` with `skip_name_prefixes=(\"django.db.models\",)`, which is an intentional pattern for issuing deprecation warnings that point to the external caller rather than internal Django frames. There is no evidence in this code that this suppresses or incorrectly filters warnings; it is a deliberate design choice for stacklevel/frame attribution. No bug is demonstrated, only a hypothetical 'may alter behavior' concern.",
+      "raw_head": "{ \"verdict\": \"dismissed\", \"confidence\": 0.85, \"severity\": \"low\", \"evidence\": \"The finding is speculative and does not identify a real defect. The code uses `warn_about_external_use(...)` with `skip_name_prefixes=(\\\"django.db.models\\\",)`, which is an intentional pattern for issuing deprecation warnin"
+    },
+    {
+      "file": "django/contrib/admin/options.py",
+      "line_range": "2801-2802",
+      "issue": "Moved translator comment inside the expression may break string extraction.",
+      "slice_ok": true,
+      "slice_head": "2776:                        collector = NestedObjects(using=using)\n2777:                        if self.instance._state.adding:\n2778:                            return\n2779:                        co",
+      "parse_ok": true,
+      "verdict": "dismissed",
+      "evidence": "Lines 2802-2803 contain the translator comment '# Translators: This string is used as a separator between list elements.' immediately preceding line 2804 '_(\", \").join(...)'. xgettext extracts comments that appear on the line(s) directly before the marked string, regardless of surrounding expression syntax. The comment is correctly positioned to annotate the _(\", \") call, so string extraction is not broken.",
+      "raw_head": "Looking at the code, the translator comment is placed on lines 2802-2803, immediately before `_(\", \")` on line 2804.\n\nxgettext extracts translator comments that appear on the line immediately preceding the marked string (or on the same line). Here the comment lines 2802-2803 are directly above `_(\","
+    },
+    {
+      "file": "docs/ref/request-response.txt",
+      "line_range": "451-453",
+      "issue": "Removed versionchanged note about cookie signing fix may mislead users about security fix.",
+      "slice_ok": true,
+      "slice_head": "426:        Cookies signed by older Django versions are accepted by default for\n427:        backwards compatibility. Set :setting:`SIGNED_COOKIE_LEGACY_SALT_FALLBACK`\n428:        to ``False`` to rejec",
+      "parse_ok": true,
+      "verdict": "dismissed",
+      "evidence": "Lines 451-453 are:\n'.. method:: HttpRequest.is_secure()'\n'    Returns ``True`` if the request is secure; that is, if it was made with HTTPS.'\nThese lines document the is_secure() method and have nothing to do with cookie signing or a security fix versionchanged note. The cookie signing content above (lines 426-449) is intact, including the SIGNED_COOKIE_LEGACY_SALT_FALLBACK note. The finding's concern does not apply to the flagged lines.",
+      "raw_head": "The flagged lines 451-453 are simply the documentation for `HttpRequest.is_secure()`. There is no removed `versionchanged` note visible, and the candidate finding's concern about cookie signing security is not applicable to these lines.\n\n{ \"verdict\": \"dismissed\", \"confidence\": 0.95, \"severity\": \"low"
+    },
+    {
+      "file": "docs/topics/cache.txt",
+      "line_range": "1439-1441",
+      "issue": "Removed versionchanged note about Authorization header in Vary may mislead users.",
+      "slice_ok": true,
+      "slice_head": "1414:    You can also use a helper function,\n1415:    :func:`django.utils.cache.patch_vary_headers`, directly. This function sets, or\n1416:    adds to, the ``Vary header``. For example::\n1417:    \n141",
+      "parse_ok": true,
+      "verdict": "dismissed",
+      "evidence": "The finding claims a 'versionchanged note about Authorization header in Vary' was removed, but this is documentation content and the code shown contains a fully coherent admonition explaining that CacheMiddleware varies on Authorization automatically (lines 1435-1440). There is no evidence in this diff of a removed versionchanged directive, and the reviewer cannot raise concerns about content not present in the code. The documentation as shown is accurate and complete.",
+      "raw_head": "{ \"verdict\": \"dismissed\", \"confidence\": 0.85, \"severity\": \"low\", \"evidence\": \"The finding claims a 'versionchanged note about Authorization header in Vary' was removed, but this is documentation content and the code shown contains a fully coherent admonition explaining that CacheMiddleware varies on"
+    },
+    {
+      "file": "tests/admin_changelist/tests.py",
+      "line_range": "1151-1155",
+      "issue": "Changed child creation to use age=i+1 instead of age=i may break test expectations.",
+      "slice_ok": true,
+      "slice_head": "1126:            request = self.factory.get(\"/child/\", data={ALL_VAR: \"\"})\n1127:            request.user = self.superuser\n1128:    \n1129:            # Test valid \"show all\" request (number of total ob",
+      "parse_ok": true,
+      "verdict": "dismissed",
+      "evidence": "Line 1164: 'self.assertContains(response, ...child.age)' reads back the actual age assigned to each child, so 'age=i + 1' does not break expectations. The assertion at line 1168 checks list_display structure, not specific age values. No assertion depends on the exact age numbers being 0-9 vs 2-10.",
+      "raw_head": "Looking at the code, the loop uses `range(1, 10)` producing i values 1-9, with `age=i+1` giving ages 2-10. The assertion at line 1164 checks `child.age`, which correctly references the actual age value assigned to each child.\n\nSince the test's only assertion depends on `child.age` (whatever it is), "
+    },
+    {
+      "file": "tests/aggregation/tests.py",
+      "line_range": "2488-2498",
+      "issue": "Changed StringAgg test to use assertCountEqual with split instead of exact match may hide ordering issues.",
+      "slice_ok": true,
+      "slice_head": "2463:            self.assertEqual(values, {\"bitxor\": 2})\n2464:    \n2465:        @skipUnlessDBFeature(\"supports_bit_aggregations\")\n2466:        def test_bit_xor_on_only_true_values(self):\n2467:        ",
+      "parse_ok": true,
+      "verdict": "dismissed",
+      "evidence": "The test at lines 2484-2498 (test_string_agg_escapes_delimiter) does not specify any order_by clause, so without an ORDER BY the DB returns rows in unspecified order. Using assertCountEqual is intentional and correct for this scenario. Ordering behavior is separately and explicitly tested by test_string_agg_order_by (lines 2500+) which uses assertEqual with exact ordered strings. Therefore no regression coverage for StringAgg ordering is lost.",
+      "raw_head": "This is a test that intentionally doesn't specify ordering (no `order_by`), so the result order is DB-dependent. Using `assertCountEqual` is the correct approach here \u2014 this test is specifically checking delimiter *escaping*, not ordering. The dedicated ordering test exists separately (`test_string_"
+    },
+    {
+      "file": "tests/aggregation/tests.py",
+      "line_range": "2552-2562",
+      "issue": "Changed StringAgg test to use assertCountEqual with split instead of exact match may hide ordering issues.",
+      "slice_ok": true,
+      "slice_head": "2527:                    )\n2528:                    self.assertEqual(values, {\"stringagg\": expected_output})\n2529:    \n2530:        @skipIfDBFeature(\"supports_aggregate_order_by_clause\")\n2531:        ",
+      "parse_ok": true,
+      "verdict": "dismissed",
+      "evidence": "The aggregate at lines 2544-2551 uses only a `filter=Q(name__startswith=\"P\")` with no `order_by` clause. Without an explicit ordering, the DB does not guarantee output order, so `assertCountEqual(values[\"stringagg\"].split(\";\"), [...])` (lines 2552-2560) is the appropriate order-independent assertion. An exact string comparison would be fragile and produce false failures. There is no ordering guarantee to be verified here, so no real ordering regression can be hidden.",
+      "raw_head": "The test at line 2544 (`test_string_agg_filter`) uses a filter without any `order_by` clause. Since no ordering is specified, the result order is not guaranteed, so `assertCountEqual` on the split values is the correct, deterministic approach. Using an exact match would introduce flakiness, not catc"
+    },
+    {
+      "file": "tests/aggregation/tests.py",
+      "line_range": "2631-2642",
+      "issue": "Changed StringAgg test to normalize values before comparison may hide ordering issues.",
+      "slice_ok": true,
+      "slice_head": "2606:                    ),\n2607:                    output_field=CharField(),\n2608:                ),\n2609:            )\n2610:            self.assertEqual(values, {\"stringagg\": \"afternoon,morning\"})\n",
+      "parse_ok": true,
+      "verdict": "dismissed",
+      "evidence": "The aggregate in test_string_agg_filter_in_subquery has no order_by clause: 'aggregate = StringAgg(\"authors__name\", delimiter=Value(\";\"), filter=~Q(...))'. The comment '# ...STRING_AGG() with ORDER BY isn't guaranteed to return results in a defined order.' correctly justifies normalization since without an explicit ORDER BY the DB order is undefined. Actual ordering is separately tested in test_order_by_in_subquery which uses order_by=\"authors__name\". Sorting here does not hide a real ordering bug because there is no ordering guarantee to verify.",
+      "raw_head": "The finding claims sorting loses ordering info. But looking at the code: this test (`test_string_agg_filter_in_subquery`) has NO `order_by` clause on the aggregate. The comment correctly explains that STRING_AGG without ORDER BY has no guaranteed order, so normalizing is the correct approach here. T"
+    }
+  ],
+  "final_verdict": [],
+  "result": {
+    "findings": []
+  }
+}
